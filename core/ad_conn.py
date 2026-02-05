@@ -1,5 +1,4 @@
-from ldap3 import SUBTREE
-from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
+from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, SUBTREE
 import logging
 import ssl
 import os
