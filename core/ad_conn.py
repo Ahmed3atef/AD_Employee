@@ -1,3 +1,4 @@
+from ldap3 import SUBTREE
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 import logging
 import ssl
@@ -21,9 +22,8 @@ class ADConnection:
             conn.unbind()
         except Exception as e3:
             print(f"✗ Anonymous bind failed: {e3}")
-            
-            
-    def connect_ad(self, username, password):
+                 
+    def connect_ad(self, username:str, password:str) -> bool:
         """
         Connect to AD
         """
@@ -40,7 +40,7 @@ class ADConnection:
             logger.error(f"Error connecting to AD: {e}")
             return False
     
-    def get_all_users_full_info(self):
+    def get_all_users_full_info(self, attributes:list[str]=None):
         """
         returns list of entries
         example:
@@ -57,14 +57,18 @@ class ADConnection:
             ]
         """
         try:
-            self.conn.search(BASE_DN, '(objectClass=person)')
+            self.conn.search(BASE_DN, 
+                             '(objectClass=person)',
+                             search_scope=SUBTREE,
+                             attributes=attributes if attributes else ['*'],
+                             )
             logger.info(f"Synced {len(self.conn.entries)} users from AD")
             return self.conn.entries
         except Exception as e:
             logger.error(f"Error syncing users from AD: {e}")
             return []
         
-    def search_user_full_info(self, username):
+    def search_user_full_info(self, username:str, attributes:list[str]=None):
         """
         returns list of entries
         example:
@@ -73,7 +77,12 @@ class ADConnection:
             ]
         """
         try:
-            self.conn.search(BASE_DN, f'(sAMAccountName={username})')
+            self.conn.search(
+                            BASE_DN, 
+                            f'(sAMAccountName={username})',
+                            search_scope=SUBTREE,
+                            attributes=attributes,
+                            )
             logger.info(f"found user {username} in AD")
             return self.conn.entries
         except Exception as e:
