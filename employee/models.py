@@ -85,4 +85,6 @@ class Employee(models.Model):
         ordering = ['full_name_en']
     
     def __str__(self):
-        return f"{self.full_name_en} - {self.job_title.title} - {self.department.name}"
+        job = self.job_title.title if self.job_title else "No Job Title"
+        dept = self.department.name if self.department else "No Department"
+        return f"{self.full_name_en or 'Unnamed'} - {job} - {dept}"

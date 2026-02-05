@@ -54,7 +54,7 @@ ROOT_URLCONF = 'ADIWA.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -134,5 +134,18 @@ JAZZMIN_SETTINGS = {
     'site_title': 'AD Web App',
     'site_header': 'AD Web App',
     'site_brand': 'AD Web App',
+    
+   "custom_links": {
+        "auth": [  
+            {
+                "name": "Transfer OU", 
+                "url": "transfer_ou", 
+                "icon": "fas fa-exchange-alt", 
+                "permissions": ["auth.view_user"] 
+            },
+        ],
+    },
+    # Ensure this is set to True to see your icons
+    "show_sidebar": True,
     
 }

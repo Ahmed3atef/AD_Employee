@@ -12,6 +12,10 @@ class ActiveDirectoryBackend(BaseBackend):
     """
     Authenticate users against Active Directory
     """
+    def sync_users(self):
+        ad = ADConnection()
+        ad.connect_ad()
+        ad.get_all_users_full_info()
     
     def authenticate(self, request, username=None, password=None, **kwargs):
         if not username or not password:
@@ -23,6 +27,11 @@ class ActiveDirectoryBackend(BaseBackend):
         if not ad.connect_ad(username, password):
             logger.warning(f"AD authentication failed for {username}")
             return None
+        
+        # Capture credentials in session for later use in Sync/Transfer actions
+        if request:
+            request.session['ad_user'] = username
+            request.session['ad_password'] = password
         
         # AD success → get or create local user
         user, created = User.objects.get_or_create(
