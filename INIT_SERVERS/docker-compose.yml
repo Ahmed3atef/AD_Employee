@@ -1,0 +1,77 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql_server
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=SaPass@ADIWA
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+      - ./init-db.sh:/init-db.sh
+    networks:
+      - assessment_network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P SaPass@ADIWA -Q "SELECT 1" -C || exit 1
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    command: >
+      /bin/bash -c "
+      /opt/mssql/bin/sqlservr &
+      sleep 30 &&
+      /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P SaPass@ADIWA -Q 'CREATE DATABASE adiwa_db' -C &&
+      wait
+      "
+
+  ad_server:
+    image: nowsci/samba-domain
+    container_name: ad_server
+    environment:
+      - DOMAIN=EISSA.LOCAL
+      - DOMAINPASS=Admin@123456
+      - DNSFORWARDER=8.8.8.8
+      - HOSTIP=172.20.0.10
+    ports:
+      - "389:389"   # LDAP
+      - "636:636"   # LDAPS
+      - "88:88"     # Kerberos
+      - "53:53"     # DNS
+      - "53:53/udp" # DNS UDP
+      # Port 445 (SMB) removed - often conflicts with host Windows sharing
+      # Port 139 removed - often conflicts with host NetBIOS
+      # Port 138 removed - often conflicts with host NetBIOS
+      - "3268:3268" # Global Catalog
+      - "3269:3269" # Global Catalog SSL
+    volumes:
+      - ad_data:/var/lib/samba
+      - ad_config:/etc/samba/external
+      - ./init-ad.sh:/init-ad.sh
+    networks:
+      assessment_network:
+        ipv4_address: 172.20.0.10
+    privileged: true
+    dns:
+      - 127.0.0.1
+      - 8.8.8.8
+    healthcheck:
+      test: smbclient -L localhost -U% || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  assessment_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  mssql_data:
+  ad_data:
+  ad_config:
