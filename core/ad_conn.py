@@ -1,7 +1,5 @@
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, SUBTREE
-import logging
-import ssl
-import os
+import logging, ssl , os
 
 logger = logging.getLogger(__name__)
 
