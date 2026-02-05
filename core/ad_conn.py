@@ -10,7 +10,19 @@ BASE_DN = os.getenv('AD_BASE_DN')
 BASE_CONTAINER = os.getenv('AD_CONTAINER_DN_BASE')
 
 class ADConnection:
-    def __init__(self, username, password):
+    def __init__(self):
+        try:
+            server = Server('localhost', port=389, get_info=ALL)
+            conn = Connection(server)
+            conn.bind()
+            print(f"✓ Anonymous bind successful")
+            print(f"Server info: {server.info}")
+            conn.unbind()
+        except Exception as e3:
+            print(f"✗ Anonymous bind failed: {e3}")
+            
+            
+    def connect_ad(self, username, password):
         """
         Connect to AD
         """
