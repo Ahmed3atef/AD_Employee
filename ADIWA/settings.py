@@ -124,6 +124,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'core.User'
 
+AUTHENTICATION_BACKENDS = [
+    'core.auth_backends.ActiveDirectoryBackend',
+    'django.contrib.auth.backends.ModelBackend',   
+]
+
 
 JAZZMIN_SETTINGS = {
     'site_title': 'AD Web App',

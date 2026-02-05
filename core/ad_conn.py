@@ -1,6 +1,7 @@
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 import logging
 import ssl
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +74,10 @@ class ADConnection:
         """
         try:
             self.conn.search(BASE_DN, f'(sAMAccountName={username})')
-            logger.info(f"Synced {len(self.conn.entries)} users from AD")
+            logger.info(f"found user {username} in AD")
             return self.conn.entries
         except Exception as e:
-            logger.error(f"Error syncing users from AD: {e}")
+            logger.error(f"Error finding user {username} in AD: {e}")
             return []
     
     def get_all_users_dn(self):
@@ -110,10 +111,10 @@ class ADConnection:
         """
         try:
             self.conn.search(BASE_DN, f'(sAMAccountName={username})')
-            logger.info(f"Synced {len(self.conn.entries)} users from AD")
+            logger.info(f"found user {username} in AD")
             return [entry.entry_dn for entry in self.conn.entries]
         except Exception as e:
-            logger.error(f"Error syncing users from AD: {e}")
+            logger.error(f"Error finding user {username} in AD: {e}")
             return []
 
     def update_ou(self, username, ou):
