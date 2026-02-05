@@ -3,37 +3,37 @@ import ssl
 
 def init_server(username, password):
     # Option 2: Use StartTLS on port 389
-        try:
-            server = Server('localhost', port=389, get_info=ALL)
+    try:
+        server = Server('localhost', port=389, get_info=ALL)
             
-            # Create connection with TLS
-            conn = Connection(
-                server,
-                user=f'{username}@eissa.local',
-                password=password
-            )
+        # Create connection with TLS
+        conn = Connection(
+            server,
+            user=f'{username}@eissa.local',
+            password=password
+        )
             
-            # Start TLS before binding
-            conn.start_tls()
-            conn.bind()
+        # Start TLS before binding
+        conn.start_tls()
+        conn.bind()
             
-            print(f"✓ Connected with StartTLS as {username}@eissa.local")
+        print(f"✓ Connected with StartTLS as {username}@eissa.local")
             
-            # Search for users
-            conn.search('DC=eissa,DC=local', '(objectClass=person)')
-            print(f"\nFound {len(conn.entries)} users:")
-            for entry in conn.entries:
-                print(f"  - {entry.entry_dn}")
+        # Search for users
+        conn.search('DC=eissa,DC=local', '(objectClass=person)')
+        print(f"\nFound {len(conn.entries)} users:")
+        for entry in conn.entries:
+            print(f"  - {entry.entry_dn}")
             
-            conn.unbind()
+        conn.unbind()
             
-        except Exception as e2:
-            print(f"✗ StartTLS also failed: {e2}")
-            print("\nTrying anonymous bind to check server...")
+    except Exception as e2:
+        print(f"✗ StartTLS also failed: {e2}")
+        print("\nTrying anonymous bind to check server...")
 
 def init_server_ssl(username, password):
+    # Option 1: Use LDAPS (port 636) with SSL
     try:
-        # Option 1: Use LDAPS (port 636) with SSL
         server = Server('localhost', port=636, use_ssl=True, get_info=ALL)
         
         conn = Connection(
