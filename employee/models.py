@@ -7,7 +7,6 @@ class Job(models.Model):
     title = models.CharField(max_length=100)
     
     class Meta:
-        db_table = 'job'
         indexes = [
             models.Index(fields=['title'], name='idx_job_title')
         ]
@@ -18,7 +17,6 @@ class Job(models.Model):
 class Department(models.Model):
     name = models.CharField(max_length=100)
     class Meta:
-        db_table = 'department'
         indexes = [
             models.Index(fields=['name'], name='idx_department_name')
         ]
@@ -76,7 +74,6 @@ class Employee(models.Model):
     
     
     class Meta:
-        db_table = 'employee'
         indexes = [
             models.Index(fields=['user'], name='idx_emp_user'),
             models.Index(fields=['nid'], name='idx_emp_nid'),

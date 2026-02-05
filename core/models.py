@@ -71,7 +71,6 @@ class User(AbstractUser):
         return self.username
     
     class Meta:
-        db_table = 'users'
         indexes = [
             models.Index(fields=['username'], name='idx_user_username'),
         ]
