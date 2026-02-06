@@ -1,12 +1,819 @@
 {% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Transfer OU - {{ site_title }}{% endblock %}
+
+{% block extrastyle %}
+<style>
+    .transfer-container {
+        max-width: 1200px;
+        margin: 30px auto;
+        padding: 0 20px;
+    }
+    
+    /* Tabs Styling */
+    .tabs-container {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .tabs-header {
+        display: flex;
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .tab-button {
+        flex: 1;
+        padding: 15px 20px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 500;
+        color: #666;
+        transition: all 0.3s;
+        position: relative;
+    }
+    
+    .tab-button:hover {
+        background: #e9ecef;
+        color: #333;
+    }
+    
+    .tab-button.active {
+        color: #417690;
+        background: white;
+    }
+    
+    .tab-button.active::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #417690;
+    }
+    
+    .tab-content {
+        display: none;
+        padding: 30px;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    /* Form Styling */
+    .transfer-card {
+        background: white;
+        padding: 0;
+    }
+    
+    .form-section {
+        margin-bottom: 25px;
+    }
+    
+    .form-section label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #333;
+    }
+    
+    .form-section input,
+    .form-section select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: border-color 0.3s;
+    }
+    
+    .form-section input:focus,
+    .form-section select:focus {
+        outline: none;
+        border-color: #417690;
+    }
+    
+    .search-btn {
+        background: #417690;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background 0.3s;
+    }
+    
+    .search-btn:hover {
+        background: #2e5a6f;
+    }
+    
+    .transfer-btn {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 12px 32px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 600;
+        transition: background 0.3s;
+        margin-top: 10px;
+    }
+    
+    .transfer-btn:hover {
+        background: #218838;
+    }
+    
+    .transfer-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+    
+    .user-info {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 6px;
+        margin-top: 20px;
+        border-left: 4px solid #417690;
+    }
+    
+    .user-info h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+        color: #333;
+    }
+    
+    .info-row {
+        display: flex;
+        padding: 8px 0;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        width: 180px;
+        color: #555;
+    }
+    
+    .info-value {
+        color: #333;
+        flex: 1;
+    }
+    
+    /* Audit Log Table Styling */
+    .audit-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .filter-controls {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    
+    .filter-controls select,
+    .filter-controls input {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    
+    .export-btn {
+        background: #17a2b8;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background 0.3s;
+    }
+    
+    .export-btn:hover {
+        background: #138496;
+    }
+    
+    .audit-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        font-size: 14px;
+    }
+    
+    .audit-table thead {
+        background: #f8f9fa;
+        position: sticky;
+        top: 0;
+    }
+    
+    .audit-table th {
+        padding: 12px 10px;
+        text-align: left;
+        font-weight: 600;
+        color: #333;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .audit-table td {
+        padding: 12px 10px;
+        border-bottom: 1px solid #e9ecef;
+        vertical-align: middle;
+    }
+    
+    .audit-table tbody tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .status-success {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .status-failed {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .status-partial {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .ou-change {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+    }
+    
+    .ou-from {
+        color: #dc3545;
+        font-weight: 500;
+    }
+    
+    .ou-to {
+        color: #28a745;
+        font-weight: 500;
+    }
+    
+    .ou-arrow {
+        color: #6c757d;
+    }
+    
+    .no-records {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+        font-size: 15px;
+    }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin-top: 20px;
+        padding: 15px 0;
+    }
+    
+    .pagination button {
+        padding: 6px 12px;
+        border: 1px solid #dee2e6;
+        background: white;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.3s;
+    }
+    
+    .pagination button:hover:not(:disabled) {
+        background: #f8f9fa;
+        border-color: #417690;
+    }
+    
+    .pagination button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .pagination .page-info {
+        color: #6c757d;
+        font-size: 14px;
+    }
+    
+    .alert {
+        padding: 12px 16px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+    
+    .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    
+    .alert-error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .alert-warning {
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+    
+    .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(255,255,255,.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+        margin-left: 10px;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .page-header {
+        margin-bottom: 30px;
+    }
+    
+    .page-header h1 {
+        margin: 0;
+        color: #333;
+        font-size: 28px;
+    }
+    
+    .page-header p {
+        margin: 8px 0 0 0;
+        color: #666;
+        font-size: 14px;
+    }
+    
+    .ou-help-text {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
+    }
+    
+    .stats-row {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .stat-card {
+        flex: 1;
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        border-left: 4px solid #417690;
+    }
+    
+    .stat-label {
+        font-size: 12px;
+        color: #6c757d;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #333;
+    }
+    
+    .db-sync-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    
+    .db-sync-yes {
+        background: #28a745;
+    }
+    
+    .db-sync-no {
+        background: #6c757d;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">Organization Unit Transfer Tool</h3>
+<div class="transfer-container">
+    <div class="page-header">
+        <h1>Transfer User OU</h1>
+        <p>Transfer employees between Organizational Units and view audit history</p>
     </div>
-    <div class="card-body">
-        <p>This is where your OU transfer logic or form will go.</p>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+    
+    <div class="tabs-container">
+        <div class="tabs-header">
+            <button class="tab-button active" onclick="switchTab('transfer')">
+                <i class="fas fa-exchange-alt"></i> Transfer OU
+            </button>
+            <button class="tab-button" onclick="switchTab('audit')">
+                <i class="fas fa-history"></i> Audit Log ({{ audit_logs.count }})
+            </button>
         </div>
+        
+        <!-- Transfer Tab -->
+        <div id="transfer-tab" class="tab-content active">
+            <form method="GET" id="searchForm">
+                <div class="form-section">
+                    <label for="username">Employee Username (sAMAccountName)</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input 
+                            type="text" 
+                            id="username" 
+                            name="username" 
+                            placeholder="e.g., jsmith or jsmith@domain.com"
+                            value="{{ username }}"
+                            required
+                        >
+                        <button type="submit" class="search-btn" id="searchBtn">
+                            <i class="fas fa-search"></i> Search
+                        </button>
+                    </div>
+                    <p class="ou-help-text">Enter the employee's Active Directory username</p>
+                </div>
+            </form>
+            
+            {% if user_info %}
+            <div class="user-info">
+                <h3><i class="fas fa-user-circle"></i> Employee Information</h3>
+                <div class="info-row">
+                    <span class="info-label">Username:</span>
+                    <span class="info-value">{{ user_info.username }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Display Name:</span>
+                    <span class="info-value">{{ user_info.display_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Current OU:</span>
+                    <span class="info-value"><strong>{{ user_info.current_ou }}</strong></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Job Title:</span>
+                    <span class="info-value">{{ user_info.job_title|default:"N/A" }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Department:</span>
+                    <span class="info-value">{{ user_info.department|default:"N/A" }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Distinguished Name:</span>
+                    <span class="info-value" style="font-size: 12px; color: #666;">{{ user_info.dn }}</span>
+                </div>
+            </div>
+            
+            <form method="POST" id="transferForm">
+                {% csrf_token %}
+                <input type="hidden" name="username" value="{{ username }}">
+                <input type="hidden" name="current_dn" value="{{ user_info.dn }}">
+                <input type="hidden" name="current_ou" value="{{ user_info.current_ou }}">
+                <input type="hidden" name="display_name" value="{{ user_info.display_name }}">
+                
+                <div class="form-section">
+                    <label for="new_ou">New Organizational Unit</label>
+                    <div class="ou-select-wrapper">
+                        <select name="new_ou" id="new_ou" required>
+                            <option value="">-- Select Department/OU --</option>
+                            {% for dept in departments %}
+                                <option value="{{ dept.name }}">{{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="ou-help-text">Select the target OU from available departments</p>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <label>
+                        <input type="checkbox" name="update_db" checked style="width: auto; margin-right: 8px;">
+                        Update database department record
+                    </label>
+                </div>
+                
+                <button type="submit" class="transfer-btn" id="transferBtn">
+                    <i class="fas fa-paper-plane"></i> Transfer Employee
+                </button>
+            </form>
+            {% endif %}
+        </div>
+        
+        <!-- Audit Log Tab -->
+        <div id="audit-tab" class="tab-content">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-label">Total Transfers</div>
+                    <div class="stat-value">{{ stats.total }}</div>
+                </div>
+                <div class="stat-card" style="border-left-color: #28a745;">
+                    <div class="stat-label">Successful</div>
+                    <div class="stat-value" style="color: #28a745;">{{ stats.success }}</div>
+                </div>
+                <div class="stat-card" style="border-left-color: #dc3545;">
+                    <div class="stat-label">Failed</div>
+                    <div class="stat-value" style="color: #dc3545;">{{ stats.failed }}</div>
+                </div>
+                <div class="stat-card" style="border-left-color: #ffc107;">
+                    <div class="stat-label">This Month</div>
+                    <div class="stat-value" style="color: #ffc107;">{{ stats.this_month }}</div>
+                </div>
+            </div>
+            
+            <div class="audit-controls">
+                <div class="filter-controls">
+                    <select id="statusFilter" onchange="filterAuditLog()">
+                        <option value="">All Statuses</option>
+                        <option value="success">Success</option>
+                        <option value="failed">Failed</option>
+                        <option value="partial">Partial</option>
+                    </select>
+                    
+                    <input type="text" id="usernameFilter" placeholder="Filter by username..." onkeyup="filterAuditLog()">
+                    
+                    <select id="dateFilter" onchange="filterAuditLog()">
+                        <option value="">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="week">This Week</option>
+                        <option value="month">This Month</option>
+                    </select>
+                </div>
+                
+                <button class="export-btn" onclick="exportAuditLog()">
+                    <i class="fas fa-download"></i> Export CSV
+                </button>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table class="audit-table" id="auditTable">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Employee</th>
+                            <th>OU Change</th>
+                            <th>Performed By</th>
+                            <th>DB Sync</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if audit_logs %}
+                            {% for log in audit_logs %}
+                            <tr data-status="{{ log.status }}" data-username="{{ log.employee_username }}" data-date="{{ log.timestamp|date:'Y-m-d' }}">
+                                <td>
+                                    <div style="font-size: 13px;">{{ log.timestamp|date:"M d, Y" }}</div>
+                                    <div style="font-size: 11px; color: #6c757d;">{{ log.timestamp|date:"H:i:s" }}</div>
+                                </td>
+                                <td>
+                                    <div style="font-weight: 500;">{{ log.employee_display_name|default:log.employee_username }}</div>
+                                    <div style="font-size: 12px; color: #6c757d;">{{ log.employee_username }}</div>
+                                </td>
+                                <td>
+                                    <div class="ou-change">
+                                        <span class="ou-from">{{ log.old_ou }}</span>
+                                        <span class="ou-arrow">→</span>
+                                        <span class="ou-to">{{ log.new_ou }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: 13px;">{{ log.performed_by.username|default:"System" }}</div>
+                                    {% if log.ip_address %}
+                                    <div style="font-size: 11px; color: #6c757d;">{{ log.ip_address }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if log.database_updated %}
+                                        <span class="db-sync-indicator db-sync-yes"></span> Yes
+                                    {% else %}
+                                        <span class="db-sync-indicator db-sync-no"></span> No
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-{{ log.status }}">
+                                        {{ log.get_status_display }}
+                                    </span>
+                                    {% if log.error_message %}
+                                    <div style="font-size: 11px; color: #dc3545; margin-top: 4px;">{{ log.error_message|truncatewords:10 }}</div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="6" class="no-records">
+                                    <i class="fas fa-inbox" style="font-size: 48px; color: #dee2e6; margin-bottom: 10px;"></i>
+                                    <div>No transfer records found</div>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if audit_logs.has_other_pages %}
+            <div class="pagination">
+                {% if audit_logs.has_previous %}
+                    <button onclick="window.location.href='?page=1&tab=audit'">First</button>
+                    <button onclick="window.location.href='?page={{ audit_logs.previous_page_number }}&tab=audit'">Previous</button>
+                {% else %}
+                    <button disabled>First</button>
+                    <button disabled>Previous</button>
+                {% endif %}
+                
+                <span class="page-info">
+                    Page {{ audit_logs.number }} of {{ audit_logs.paginator.num_pages }}
+                </span>
+                
+                {% if audit_logs.has_next %}
+                    <button onclick="window.location.href='?page={{ audit_logs.next_page_number }}&tab=audit'">Next</button>
+                    <button onclick="window.location.href='?page={{ audit_logs.paginator.num_pages }}&tab=audit'">Last</button>
+                {% else %}
+                    <button disabled>Next</button>
+                    <button disabled>Last</button>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </div>
+
+<script>
+// Tab Switching
+function switchTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabName + '-tab').classList.add('active');
+    event.target.closest('.tab-button').classList.add('active');
+    
+    // Update URL without reload
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tabName);
+    window.history.pushState({}, '', url);
+}
+
+// Check URL for tab parameter on load
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tab = urlParams.get('tab');
+    if (tab === 'audit') {
+        switchTab('audit');
+        document.querySelectorAll('.tab-button')[1].click();
+    }
+    
+    const searchForm = document.getElementById('searchForm');
+    const transferForm = document.getElementById('transferForm');
+    const searchBtn = document.getElementById('searchBtn');
+    const transferBtn = document.getElementById('transferBtn');
+    
+    if (searchForm) {
+        searchForm.addEventListener('submit', function(e) {
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+        });
+    }
+    
+    if (transferForm) {
+        transferForm.addEventListener('submit', function(e) {
+            if (!confirm('Are you sure you want to transfer this employee to the selected OU?\n\nThis will update both Active Directory and the database.')) {
+                e.preventDefault();
+                return false;
+            }
+            
+            transferBtn.disabled = true;
+            transferBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Transferring...';
+        });
+    }
+});
+
+// Filter Audit Log
+function filterAuditLog() {
+    const statusFilter = document.getElementById('statusFilter').value.toLowerCase();
+    const usernameFilter = document.getElementById('usernameFilter').value.toLowerCase();
+    const dateFilter = document.getElementById('dateFilter').value;
+    const rows = document.querySelectorAll('#auditTable tbody tr[data-status]');
+    
+    const today = new Date();
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    rows.forEach(row => {
+        const status = row.getAttribute('data-status');
+        const username = row.getAttribute('data-username').toLowerCase();
+        const rowDate = new Date(row.getAttribute('data-date'));
+        
+        let showRow = true;
+        
+        // Status filter
+        if (statusFilter && status !== statusFilter) {
+            showRow = false;
+        }
+        
+        // Username filter
+        if (usernameFilter && !username.includes(usernameFilter)) {
+            showRow = false;
+        }
+        
+        // Date filter
+        if (dateFilter === 'today' && rowDate.toDateString() !== today.toDateString()) {
+            showRow = false;
+        } else if (dateFilter === 'week' && rowDate < weekAgo) {
+            showRow = false;
+        } else if (dateFilter === 'month' && rowDate < monthAgo) {
+            showRow = false;
+        }
+        
+        row.style.display = showRow ? '' : 'none';
+    });
+}
+
+// Export Audit Log
+function exportAuditLog() {
+    const table = document.getElementById('auditTable');
+    let csv = [];
+    
+    // Headers
+    const headers = [];
+    table.querySelectorAll('thead th').forEach(th => {
+        headers.push(th.textContent.trim());
+    });
+    csv.push(headers.join(','));
+    
+    // Visible rows only
+    table.querySelectorAll('tbody tr[data-status]').forEach(row => {
+        if (row.style.display !== 'none') {
+            const cols = [];
+            row.querySelectorAll('td').forEach((td, index) => {
+                let text = td.textContent.trim().replace(/\s+/g, ' ');
+                text = text.replace(/"/g, '""'); // Escape quotes
+                cols.push(`"${text}"`);
+            });
+            csv.push(cols.join(','));
+        }
+    });
+    
+    // Download
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ou_transfer_audit_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+</script>
 {% endblock %}

@@ -1,5 +1,5 @@
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, SUBTREE
-import logging, ssl , os
+import logging, ssl , os, re
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ BASE_CONTAINER = os.getenv('AD_CONTAINER_DN_BASE')
 class ADConnection:
     def __init__(self):
         try:
-            server = Server('localhost', port=389, get_info=ALL)
+            server = Server(SERVER_HOST, port=389, get_info=ALL)
             conn = Connection(server)
             conn.bind()
             print(f"✓ Anonymous bind successful")
@@ -123,25 +123,67 @@ class ADConnection:
             logger.error(f"Error finding user {username} in AD: {e}")
             return []
 
-    def update_ou(self, username, ou):
+    def update_ou(self, username, new_ou):
         """
-        Update the OU of a user
+        Update the OU of a user by moving them to a new OU
         
+        Args:
+            username (str): sAMAccountName of the user
+            new_ou (str): Name of the new OU (e.g., 'IT', 'HR', 'Sales')
+        
+        Returns:
+            bool: True if successful, False otherwise
         """
         try:
-            old_dn = self.searsh_user_dn(username)
-            new_ou = f'OU={ou},' + BASE_CONTAINER
-            if old_dn:
-                self.conn.modify_dn(old_dn, f'CN={username}', new_superior=new_ou)
-                logger.info(f"Updated OU of {username} to {new_ou}")
-                return True
-            else:
+            # 1. Find the user's current DN
+            old_dn_list = self.searsh_user_dn(username)
+            
+            if not old_dn_list or len(old_dn_list) == 0:
                 logger.error(f"User {username} not found in AD")
                 return False
+            
+            old_dn = old_dn_list[0]
+            logger.info(f"Found user {username} with DN: {old_dn}")
+            
+            # 2. Extract the CN (Common Name) from the old DN
+            # DN format: CN=mohamed khaled,OU=Projects,OU=New,DC=eissa,DC=local
+            cn_match = re.match(r'CN=([^,]+)', old_dn)
+            if not cn_match:
+                logger.error(f"Could not extract CN from DN: {old_dn}")
+                return False
+            
+            cn = cn_match.group(1)
+            relative_dn = f"CN={cn}"
+            logger.info(f"Extracted CN: {cn}")
+            
+            # 3. Construct the new superior DN (new OU path)
+            new_superior = f'OU={new_ou},{BASE_CONTAINER}'
+            logger.info(f"New superior DN: {new_superior}")
+            
+            # 4. Perform the modify_dn operation
+            # This moves the user from their current location to the new OU
+            success = self.conn.modify_dn(
+                dn=old_dn,
+                relative_dn=relative_dn,
+                new_superior=new_superior
+            )
+            
+            if success:
+                new_dn = f"{relative_dn},{new_superior}"
+                logger.info(f"Successfully moved user {username} from '{old_dn}' to '{new_dn}'")
+                return True
+            else:
+                logger.error(f"Failed to move user {username}. LDAP error: {self.conn.result}")
+                return False
+                
         except Exception as e:
             logger.error(f"Error updating OU of {username}: {e}")
             return False
                 
     def __del__(self):
-        self.conn.unbind()
-        logger.info(f"Disconnected from AD as {self.username}")
+        try:
+            if hasattr(self, 'conn') and self.conn:
+                self.conn.unbind()
+                logger.info(f"Disconnected from AD")
+        except Exception as e:
+            logger.error(f"Error disconnecting from AD: {e}")

@@ -135,17 +135,16 @@ JAZZMIN_SETTINGS = {
     'site_header': 'AD Web App',
     'site_brand': 'AD Web App',
     
-   "custom_links": {
-        "auth": [  
+    "custom_links": {
+        "employee": [  
             {
                 "name": "Transfer OU", 
-                "url": "transfer_ou", 
+                "url": "admin:transfer_ou_page",  
                 "icon": "fas fa-exchange-alt", 
-                "permissions": ["auth.view_user"] 
+                "permissions": ["employee.view_employee"]
             },
         ],
     },
-    # Ensure this is set to True to see your icons
-    "show_sidebar": True,
     
+    "show_sidebar": True,
 }
