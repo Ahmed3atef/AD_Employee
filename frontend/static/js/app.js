@@ -39,10 +39,10 @@ const TokenManager = {
 
 // API Client
 const API = {
-    baseURL: 'http://127.0.0.1:8000/api/auth',
+    baseURL: 'http://127.0.0.1:8000/api',
     
     async login(username, password) {
-        const response = await fetch(`${this.baseURL}/login/`, {
+        const response = await fetch(`${this.baseURL}/auth/login/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -57,7 +57,21 @@ const API = {
         
         return await response.json();
     },
+    async getEmployeeProfile() {
+        const response = await this.authenticatedRequest(
+            `${this.baseURL}/employee/profile/`,
+            { method: 'GET' }
+        );
     
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to load profile');
+        }
+    
+        return await response.json();
+    },
+    
+
     async authenticatedRequest(url, options = {}) {
         const token = TokenManager.getAccessToken();
         
@@ -98,7 +112,7 @@ function renderLogin() {
                     <input 
                         type="text" 
                         id="username" 
-                        placeholder="Administrator@eissa.local or admin" 
+                        placeholder="'username'@eissa.local or 'username" 
                         required
                         autocomplete="username"
                     >
@@ -129,50 +143,62 @@ function renderLogin() {
     document.getElementById('loginForm').addEventListener('submit', handleLogin);
 }
 
-function renderDashboard() {
-    // Show navbar
+async function renderDashboard() {
     navbar.classList.remove('hidden');
-    
-    const userData = TokenManager.getUser();
-    const username = userData ? userData.username : 'User';
 
     app.innerHTML = `
         <div class="dashboard-view">
-            <h1>Welcome, ${username}!</h1>
-            <p style="margin-bottom: 20px; color: #666;">
-                You are successfully authenticated with Active Directory
-            </p>
-            
-            <div class="card">
-                <h3>🔐 Authentication Status</h3>
-                <p><strong>Username:</strong> ${username}</p>
-                <p><strong>Staff Access:</strong> ${userData?.is_staff ? 'Yes' : 'No'}</p>
-                <p><strong>Admin Access:</strong> ${userData?.is_superuser ? 'Yes' : 'No'}</p>
-                <p><strong>Joined:</strong> ${userData?.date_joined ? new Date(userData.date_joined).toLocaleDateString() : 'N/A'}</p>
-            </div>
-            
-            <div class="card" style="border-left-color: #007bff;">
-                <h3>📊 Quick Actions</h3>
-                <p>• Access Django Admin Panel</p>
-                <p>• Manage Employees</p>
-                <p>• Transfer OUs</p>
-                <p>• View Audit Logs</p>
-            </div>
-            
-            <div class="card" style="border-left-color: #28a745;">
-                <h3>💡 JWT Token Info</h3>
-                <p>Your session is secured with JWT tokens</p>
-                <p><small style="color: #666;">Access token expires in 5 minutes</small></p>
-                <p><small style="color: #666;">Refresh token expires in 1 day</small></p>
-            </div>
-            
-            <div style="margin-top: 20px; text-align: center;">
-                <a href="/admin/" class="btn-primary" style="display: inline-block; text-decoration: none; padding: 12px 24px;">
-                    Go to Admin Panel
-                </a>
-            </div>
+            <h1>Employee Dashboard</h1>
+            <p style="color:#666">Loading your profile...</p>
         </div>
     `;
+
+    try {
+        const profile = await API.getEmployeeProfile();
+
+        app.innerHTML = `
+            <div class="dashboard-view">
+                <h1>Welcome, ${profile.display_name}</h1>
+
+                <div class="card">
+                    <h3>Basic Information</h3>
+                    <p><strong>Username:</strong> ${profile.username}</p>
+                    <p><strong>Email:</strong> ${profile.email}</p>
+                    <p><strong>Phone:</strong> ${profile.phone || '-'}</p>
+                    <p><strong>OU:</strong> ${profile.ou}</p>
+                </div>
+
+                <div class="card">
+                    <h3>Employment Details</h3>
+                    <p><strong>Full Name (EN):</strong> ${profile.full_name_en}</p>
+                    <p><strong>Full Name (AR):</strong> ${profile.full_name_ar || '-'}</p>
+                    <p><strong>Department:</strong> ${profile.department?.name || '-'}</p>
+                    <p><strong>Job Title:</strong> ${profile.job_title?.title || '-'}</p>
+                    <p><strong>Hire Date:</strong> ${profile.hire_date}</p>
+                    <p><strong>NID:</strong> ${profile.nid || '-'}</p>
+                </div>
+
+                <div class="card">
+                    <h3>Active Directory</h3>
+                    <p><strong>Display Name:</strong> ${profile.display_name}</p>
+                    <p><strong>Distinguished Name:</strong></p>
+                    <code style="display:block; background:#f8f9fa; padding:10px; border-radius:6px;">
+                        ${profile.distinguished_name}
+                    </code>
+                </div>
+
+                
+            </div>
+        `;
+    } catch (error) {
+        app.innerHTML = `
+            <div class="dashboard-view">
+                <h2 style="color:#dc3545">Error</h2>
+                <p>${error.message}</p>
+                <button onclick="handleLogout()">Back to Login</button>
+            </div>
+        `;
+    }
 }
 
 // --- 2. The Logic (Controllers) ---

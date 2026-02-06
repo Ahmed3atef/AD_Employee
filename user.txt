@@ -1,0 +1,13 @@
+Administrator@eissa.local 
+Password: Admin@123456
+
+
+=== Sample Users ==="
+mohamed.khaled@eissa.local (OU=Projects)"
+ahmed.hassan@eissa.local (OU=IT)"
+sara.ali@eissa.local (OU=HR)"
+fatima.ahmed@eissa.local (OU=Accountant)"
+omar.mahmoud@eissa.local (OU=Sales)"
+
+Password: User@123456
+

@@ -8,7 +8,7 @@ from drf_spectacular.utils import extend_schema, OpenApiExample
 from .serializers import LoginSerializer, LoginResponseSerializer, ErrorSerializer
 import logging
 
-logget = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class LoginView(APIView):
