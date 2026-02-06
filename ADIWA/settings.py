@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     # third party apps
     'rest_framework',
     'rest_framework_simplejwt',
+    'drf_spectacular',
     # my apps
     'core',
     'employee',
@@ -152,4 +153,16 @@ JAZZMIN_SETTINGS = {
     },
     
     "show_sidebar": True,
+}
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'AD Web App API',
+    'DESCRIPTION': 'AD Web App API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
