@@ -1,5 +1,6 @@
 from pathlib import Path
 from dotenv import load_dotenv
+from .ad_conn import ADConnection
 import os
 
 
@@ -86,6 +87,18 @@ DATABASES = {
     }
 }
 
+SERVER_HOST = os.getenv('AD_SERVER')  
+DOMAIN = os.getenv('AD_DOMAIN')
+BASE_DN = os.getenv('AD_BASE_DN')
+CONTAINER_DN_BASE = os.getenv('AD_CONTAINER_DN_BASE')
+
+ACTIVE_DIR = ADConnection(
+    server_host=SERVER_HOST,
+    domain=DOMAIN,
+    base_dn=BASE_DN,
+    base_container=CONTAINER_DN_BASE,
+)
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -124,6 +137,12 @@ STATICFILES_DIRS = [
 ]
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+# SESSION_COOKIE_HTTPONLY = True
+# SESSION_COOKIE_SECURE = False  # HTTPS only
+# SESSION_SAVE_EVERY_REQUEST = False
+
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

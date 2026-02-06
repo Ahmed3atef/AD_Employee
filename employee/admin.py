@@ -1,4 +1,4 @@
-import re, os
+import re
 from django.contrib import admin, messages
 from django.urls import path
 from django.shortcuts import redirect, render
@@ -9,7 +9,7 @@ from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
 from django.contrib.contenttypes.models import ContentType
 from datetime import datetime, timedelta
 from . import models
-from core.ad_conn import ADConnection  
+from django.conf import settings 
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -64,7 +64,7 @@ class EmployeeAdmin(admin.ModelAdmin):
             self.message_user(request, "Credentials not found in session. Please re-login.", level=messages.ERROR)
             return redirect("admin:index")
 
-        ad = ADConnection()
+        ad = settings.ACTIVE_DIR
         if not ad.connect_ad(username, password):
             self.message_user(request, "Failed to connect to AD with your credentials.", level=messages.ERROR)
             return redirect("admin:index")
@@ -109,7 +109,7 @@ class EmployeeAdmin(admin.ModelAdmin):
                 # 4. Sync User
                 ad_username = get_clean_val('sAMAccountName').lower()
                 user_obj, _ = User.objects.get_or_create(
-                    username=f'{ad_username}@{os.getenv('AD_DOMAIN')}',
+                    username=f'{ad_username}@{settings.DOMAIN}',
                     defaults={'is_active': True, 'is_staff': False}
                 )
 
@@ -184,7 +184,7 @@ class EmployeeAdmin(admin.ModelAdmin):
             return redirect("admin:index")
 
         # Initialize AD connection
-        ad = ADConnection()
+        ad = settings.ACTIVE_DIR
         if not ad.connect_ad(username, password):
             self.message_user(request, "Failed to connect to AD with your credentials.", level=messages.ERROR)
             return redirect("admin:index")
@@ -256,7 +256,7 @@ class EmployeeAdmin(admin.ModelAdmin):
                     cn_match = re.match(r'CN=([^,]+)', old_dn)
                     if cn_match:
                         cn = cn_match.group(1)
-                        base_container = os.getenv('AD_CONTAINER_DN_BASE')
+                        base_container = settings.CONTAINER_DN_BASE
                         new_dn = f"CN={cn},OU={new_ou},{base_container}"
                     
                     # Update database if requested
