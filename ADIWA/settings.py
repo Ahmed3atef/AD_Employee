@@ -136,7 +136,7 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'frontend/static'),
 ]
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 # SESSION_COOKIE_HTTPONLY = True

@@ -1,0 +1,37 @@
+# Python
+*.pyc
+*.pyo
+__pycache__
+*.egg-info
+*.mo
+
+# Virtual environments
+.venv
+env/
+venv/
+
+# Development artifacts
+*.db
+local_settings.py
+logs/
+dist/
+build/
+.cache
+
+# IDE and OS files
+.idea/
+.vscode/
+.project
+.pydevproject
+.DS_Store
+Thumbs.db
+
+# Version control
+.git/
+.gitignore
+
+# Media and Static files (adjust based on your deployment strategy)
+/media
+/staticfiles
+
+*.bak

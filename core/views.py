@@ -14,10 +14,6 @@ logger = logging.getLogger(__name__)
 class LoginView(APIView):
     """
     Authenticates users against AD and returns JWT tokens on success.
-    1. Validate credentials against Active Directory
-    2. Create or update user in local database
-    3. Generate JWT access and refresh tokens
-    4. Return tokens and user information
     """
     
     permission_classes = []
