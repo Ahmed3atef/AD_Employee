@@ -87,46 +87,36 @@ A Django-based web application that integrates with Microsoft Active Directory (
 
 ### Using Docker (Recommended)
 
+This setup uses Docker Compose to run the Active Directory (AD) server, MS SQL Server, and the Django application, creating a complete local development environment.
+
 #### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd ADIWA
+git clone https://github.com/Ahmed3atef/AD_Employee.git
+cd AD_Employee
 ```
 
-#### 2. Pull the Docker Image
-```bash
-docker pull <your-dockerhub-username>/adiwa:latest
-```
-
-#### 3. Set Up Environment Variables
+#### 2. Set Up Environment Variables
 ```bash
 cp .ex.env .env
-# Edit .env with your configuration
+# Edit .env with your configuration.
+# Ensure 'AD_SERVER' is correctly set. If using the SERVERS_DOCKER setup (Step 3),
+# this will typically be the IP address assigned to the AD server within the docker network,
+# such as ldap://172.20.0.10:389, as configured in the main docker-compose.yml.
 ```
 
-#### 4. Initialize MS SQL Server
+#### 3. Start Active Directory Server
+Navigate to the `SERVERS_DOCKER` directory and run the `start.sh` script. This will bring up the AD server in a separate Docker Compose setup, making it accessible to your main application.
 ```bash
-docker-compose run --rm app python manage.py init-mssql
+cd SERVERS_DOCKER
+./start.sh
+cd ..
 ```
+*Wait for the AD server to be fully operational before proceeding. You can monitor its logs if needed.*
 
-#### 5. Initialize Active Directory
+#### 4. Build and Start the Application
+From the project root directory (`AD_Employee`), use Docker Compose to build the Django application image and start the application services (Django app and its dedicated MS SQL Server). Database migrations and the creation of a default superuser will be handled automatically upon application startup.
 ```bash
-docker-compose run --rm app python manage.py init-ad
-```
-
-#### 6. Run Migrations
-```bash
-docker-compose run --rm app python manage.py migrate
-```
-
-#### 7. Create Superuser
-```bash
-docker-compose run --rm app python manage.py createsuperuser
-```
-
-#### 8. Start the Application
-```bash
-docker-compose up -d
+docker-compose up --build -d
 ```
 
 The application will be available at:
@@ -138,7 +128,7 @@ The application will be available at:
 
 #### 1. Clone and Setup Python Environment
 ```bash
-git clone <repository-url>
+git clone https://github.com/Ahmed3atef/AD_Employee.git
 cd ADIWA
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -387,7 +377,7 @@ pip install -r requirements.txt
 python manage.py migrate 
 
 # Creating super user to access admin panel
-python mange.py createsuperuser
+python manage.py createsuperuser
 
 # Run development server with debug toolbar
 DEBUG=True python manage.py runserver
