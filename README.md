@@ -2,21 +2,6 @@
 
 A Django-based web application that integrates with Microsoft Active Directory (AD) for user authentication and management, with MS SQL Server as the database backend.
 
-## 📋 Table of Contents
-
-- [Features](#features)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-  - [Using Docker (Recommended)](#using-docker-recommended)
-  - [Manual Installation](#manual-installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [API Documentation](#api-documentation)
-- [Project Structure](#project-structure)
-- [Development](#development)
-
-
 ## ✨ Features
 
 ### Core Features
