@@ -70,7 +70,104 @@ A Django-based web application that integrates with Microsoft Active Directory (
 
 ## 🚀 Installation
 
-### Using Docker (Recommended)
+### Using Docker Compose (Recommended)
+- require a AD server 
+
+1- Make sure you have docker and docker-compose installed on your system
+and make `docker-compose.yml` file with this script:
+
+```docker-compose
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql_server
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=SaPass@ADIWA
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - assessment_network
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P SaPass@ADIWA -Q "SELECT 1" -C || exit 1
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    command: >
+      /bin/bash -c "
+      /opt/mssql/bin/sqlservr &
+      sleep 30 &&
+      /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P SaPass@ADIWA -Q 'CREATE DATABASE adiwa_db' -C &&
+      wait
+      "
+
+  django_app:
+    image: ahmedatef101/ad-employee:latest
+    container_name: django_app
+    environment:
+      - SECRET_KEY=django-insecure-ql^cl-(5mgbjtj3g#-7gyyoj3%3+(1(teu4r!lyt^9+9#bw&i@
+      - DEBUG=True
+
+      # MS SQL Server Configuration
+      - DB_ENGINE=mssql
+      - DB_NAME=adiwa_db
+      - DB_USER=sa
+      - DB_PASSWORD=SaPass@ADIWA
+      - DB_HOST=mssql
+      - DB_PORT=1433
+
+      # Active Directory Configuration (adjust based on your setup)
+      # If AD runs in separate Docker Compose (from SERVERS_DOCKER):
+      - AD_SERVER=ldap://172.20.0.10:389
+      # If AD runs on host machine:
+      #- AD_SERVER=ldap://host.docker.internal:389
+      
+      - AD_DOMAIN=eissa.local
+      - AD_BASE_DN=DC=eissa,DC=local
+      - AD_CONTAINER_DN_BASE=OU=New,DC=eissa,DC=local
+      
+      # Frontend
+      - BASE_URL=http://127.0.0.1:8000/api/
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    networks:
+      - assessment_network
+    depends_on:
+      mssql:
+        condition: service_healthy
+    command: >
+      /bin/bash -c "
+      sleep 10 &&
+      python manage.py migrate &&
+      python manage.py create_default_superuser &&
+      python manage.py runserver 0.0.0.0:8000
+      "
+
+networks:
+  assessment_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+
+volumes:
+  mssql_data:
+```
+
+2- run this command:
+```bash
+docker-compose up --build -d
+```
+
+
+### Using Docker
+- require a AD server 
 
 This setup uses Docker Compose to run the Active Directory (AD) server, MS SQL Server, and the Django application, creating a complete local development environment.
 
