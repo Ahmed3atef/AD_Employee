@@ -74,7 +74,7 @@ A Django-based web application that integrates with Microsoft Active Directory (
 - require a AD server 
 
 1- Make sure you have docker and docker-compose installed on your system
-and make `docker-compose.yml` file with this script:
+and create `docker-compose.yml` file with this script:
 
 ```docker-compose
 services:
