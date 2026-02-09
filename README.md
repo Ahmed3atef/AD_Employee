@@ -236,6 +236,9 @@ AD_SERVER=ldap://your-ad-server:389
 AD_DOMAIN=yourdomain.local
 AD_BASE_DN=DC=yourdomain,DC=local
 AD_CONTAINER_DN_BASE=OU=Users,DC=yourdomain,DC=local
+
+# Frontend
+BASE_URL=#http://127.0.0.1:8000/api/
 ```
 
 #### 3. Run Migrations
@@ -276,6 +279,7 @@ python manage.py runserver
 | `AD_DOMAIN` | AD domain | `example.local` |
 | `AD_BASE_DN` | AD base DN | `DC=example,DC=local` |
 | `AD_CONTAINER_DN_BASE` | AD container DN | `OU=Users,DC=example,DC=local` |
+| `BASE_URL` | Frontend Base-URL API |`http://127.0.0.1:8000/api/`|
 
 ### Active Directory Setup
 
