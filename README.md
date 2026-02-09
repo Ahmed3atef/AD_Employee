@@ -162,7 +162,7 @@ volumes:
 
 2- run this command:
 ```bash
-docker-compose up --build -d
+docker-compose up -d
 ```
 
 
