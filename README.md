@@ -20,7 +20,7 @@ A Django-based web application that integrates with Microsoft Active Directory (
 - Interactive API documentation (Swagger/ReDoc)
 - Admin interface with Jazzmin theme
 - Real-time AD user synchronization
-- Session-based credential storage for AD operations
+- Cached credential storage for AD operations
 
 ## 🏗️ Architecture
 
@@ -131,7 +131,7 @@ services:
       - AD_CONTAINER_DN_BASE=OU=New,DC=eissa,DC=local
       
       # Frontend
-      - BASE_URL=http://127.0.0.1:8000/api/
+      - BASE_URL=http://[IP_ADDRESS]/api/
     ports:
       - "8000:8000"
     volumes:
@@ -285,7 +285,7 @@ python manage.py runserver
 
 #### Organizational Units Structure
 ```
-DC=example,DC=local
+DC=eissa,DC=local
 └── OU=New
     ├── OU=Accountant
     ├── OU=Administrative Affairs
