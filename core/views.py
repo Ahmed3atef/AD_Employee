@@ -139,7 +139,7 @@ class LoginView(APIView):
                 'date_joined': user.date_joined.isoformat(),
             }
             
-            print(f"Successful login for user: {username}")
+            logger.info(f"Successful login for user: {username}")
             
             
             return Response(
@@ -152,7 +152,7 @@ class LoginView(APIView):
             )
             
         except Exception as e:
-            print(f"Login error for {username}: {str(e)}", exc_info=True)
+            logger.error(f"Login error for {username}: {str(e)}", exc_info=True)
             return Response(
                 {
                     'error': 'Server error',
