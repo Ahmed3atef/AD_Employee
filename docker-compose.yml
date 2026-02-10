@@ -52,7 +52,7 @@ services:
       - AD_CONTAINER_DN_BASE=OU=New,DC=eissa,DC=local
       
       # Frontend
-      - BASE_URL=http://127.0.0.1:8000/api/
+      - BASE_URL=http://[IP_ADDRESS]/api/
     ports:
       - "8000:8000"
     volumes:

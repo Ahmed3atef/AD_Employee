@@ -15,6 +15,12 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:8000',
+    'http://172.0.0.1:8000'
+]
+
+# CORS_ALLOW_ALL_ORIGINS = True
 
 INSTALLED_APPS = [
     'jazzmin',
@@ -28,6 +34,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'drf_spectacular',
+    'corsheaders',
     # my apps
     'core',
     'employee',
@@ -35,6 +42,7 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -98,6 +106,13 @@ ACTIVE_DIR = ADConnection(
     base_dn=BASE_DN,
     base_container=CONTAINER_DN_BASE,
 )
+
+CACHES = {
+    'default':{
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }   
+}
 
 
 # Password validation
@@ -176,7 +191,13 @@ JAZZMIN_SETTINGS = {
 
 
 REST_FRAMEWORK = {
-    'COERCE_DECIMAL_TO_STRING':False,
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'COERCE_DECIMAL_TO_STRING': False,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 

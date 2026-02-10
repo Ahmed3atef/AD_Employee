@@ -1,6 +1,7 @@
 import re
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.conf import settings
@@ -85,9 +86,10 @@ class EmployeeProfileView(APIView):
                     status=status.HTTP_404_NOT_FOUND
                 )
             
-            ad_username = request.session.get('ad_user')
-            ad_password = request.session.get('ad_password')
             
+            ad_creds = cache.get(f'ad_creds_{request.user.id}')
+            ad_username = ad_creds['username']
+            ad_password = ad_creds['password']
             
             serializer = EmployeeProfileSerializer(employee)
             employee_data = serializer.data

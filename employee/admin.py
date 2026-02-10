@@ -9,6 +9,7 @@ from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
 from django.contrib.contenttypes.models import ContentType
 from datetime import datetime, timedelta
 from . import models
+from django.core.cache import cache
 from django.conf import settings 
 from django.contrib.auth import get_user_model
 
@@ -57,11 +58,18 @@ class EmployeeAdmin(admin.ModelAdmin):
         return custom_urls + urls
     
     def sync_users_action(self, request):
-        username = request.session.get('ad_user')
-        password = request.session.get('ad_password')
+        cache_key = f'ad_creds_{request.user.id}'
+        creds = cache.get(cache_key)
+        
+        if not creds:
+            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
+            return redirect("admin:index")
+        
+        username = creds['username']
+        password = creds['password']
 
         if not username or not password:
-            self.message_user(request, "Credentials not found in session. Please re-login.", level=messages.ERROR)
+            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
             return redirect("admin:index")
 
         ad = settings.ACTIVE_DIR
@@ -175,12 +183,19 @@ class EmployeeAdmin(admin.ModelAdmin):
     def transfer_ou_view(self, request):
         """Handle both GET (search) and POST (transfer) for Transfer OU page"""
         
-        # Get AD credentials from session
-        username = request.session.get('ad_user')
-        password = request.session.get('ad_password')
+        # Get AD credentials from cache
+        cache_key = f'ad_creds_{request.user.id}'
+        creds = cache.get(cache_key)
+        
+        if not creds:
+            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
+            return redirect("admin:index")
+        
+        username = creds['username']
+        password = creds['password']
 
         if not username or not password:
-            self.message_user(request, "Credentials not found in session. Please re-login.", level=messages.ERROR)
+            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
             return redirect("admin:index")
 
         # Initialize AD connection
