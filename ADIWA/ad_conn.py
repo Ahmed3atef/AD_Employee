@@ -128,6 +128,107 @@ class ADConnection:
         logger.info(f"Moved {username} to OU={new_ou}")
         return True
 
+    def create_user(self, username, password, given_name, surname,
+                    mail=None, telephone=None, ou=None):
+        """
+        Create a new user in Active Directory.
+
+        Args:
+            username:    sAMAccountName (e.g. 'ahmed.atef')
+            password:    plain-text password
+            given_name:  first name
+            surname:     last name
+            mail:        email address (optional)
+            telephone:   phone number (optional)
+            ou:          target OU name under base_container (optional)
+
+        Returns:
+            (True, message) on success, (False, error_message) on failure.
+        """
+        self._ensure_bound()
+
+        # Build the DN
+        display_name = f"{given_name} {surname}"
+        container = f"OU={ou},{self.base_container}" if ou else self.base_container
+        user_dn = f"CN={display_name},{container}"
+        upn = f"{username}@{self.domain}"
+
+        # Build attributes
+        attributes = {
+            'objectClass': ['top', 'person', 'organizationalPerson', 'user'],
+            'sAMAccountName': username,
+            'userPrincipalName': upn,
+            'givenName': given_name,
+            'sn': surname,
+            'displayName': display_name,
+            'userAccountControl': '512',  # Normal account, enabled
+        }
+
+        if mail:
+            attributes['mail'] = mail
+        if telephone:
+            attributes['telephoneNumber'] = telephone
+
+        # Create the user entry
+        success = self.conn.add(user_dn, attributes=attributes)
+        if not success:
+            error = self.conn.result.get('description', 'Unknown error')
+            message = self.conn.result.get('message', '')
+            logger.error(f"Failed to create AD user {username}: {error} - {message}")
+            return False, f"{error}: {message}" if message else error
+
+        # Set password  (AD requires unicodePwd in modify, UTF-16-LE encoded)
+        encoded_pwd = f'"{password}"'.encode('utf-16-le')
+        pwd_change = self.conn.modify(
+            user_dn,
+            {'unicodePwd': [(2, [encoded_pwd])]}  # 2 = MODIFY_REPLACE
+        )
+
+        if not pwd_change:
+            # User was created but password failed — log warning
+            error = self.conn.result.get('description', 'Unknown error')
+            logger.warning(f"AD user {username} created but password set failed: {error}")
+            return True, f"User created but password set failed: {error}. Set password manually."
+
+        logger.info(f"Created AD user: {username} in {container}")
+        return True, f"User '{username}' created successfully in AD."
+
+    def change_password(self, username, new_password):
+        """
+        Change a user's password in Active Directory.
+
+        Args:
+            username:      sAMAccountName (e.g. 'ahmed.atef')
+            new_password:  the new plain-text password
+
+        Returns:
+            (True, message) on success, (False, error_message) on failure.
+        """
+        self._ensure_bound()
+
+        # Find the user's DN
+        dns = self.search_user_dn(username)
+        if not dns:
+            return False, f"User '{username}' not found in Active Directory."
+
+        user_dn = dns[0]
+
+        # AD requires the password as a UTF-16-LE encoded, double-quoted string
+        encoded_pwd = f'"{new_password}"'.encode('utf-16-le')
+        success = self.conn.modify(
+            user_dn,
+            {'unicodePwd': [(2, [encoded_pwd])]}  # 2 = MODIFY_REPLACE
+        )
+
+        if not success:
+            error = self.conn.result.get('description', 'Unknown error')
+            message = self.conn.result.get('message', '')
+            logger.error(f"Failed to change password for {username}: {error} - {message}")
+            return False, f"{error}: {message}" if message else error
+
+        logger.info(f"Password changed for AD user: {username}")
+        return True, f"Password for '{username}' changed successfully."
+
     def __del__(self):
         try:
             if self.conn and self.conn.bound:

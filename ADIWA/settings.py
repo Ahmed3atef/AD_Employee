@@ -1,6 +1,7 @@
 from pathlib import Path
 from dotenv import load_dotenv
 from .ad_conn import ADConnection
+from datetime import timedelta 
 import os
 
 
@@ -176,6 +177,14 @@ JAZZMIN_SETTINGS = {
     'site_brand': 'AD Web App',
     
     "custom_links": {
+        "core": [
+            {
+                "name": "Create AD User",
+                "url": "admin:create_ad_user",
+                "icon": "fas fa-user-plus",
+                "permissions": ["core.add_user"],
+            },
+        ],
         "employee": [  
             {
                 "name": "Transfer OU", 
@@ -199,6 +208,15 @@ REST_FRAMEWORK = {
     ],
     'COERCE_DECIMAL_TO_STRING': False,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('JWT',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
 }
 
 SPECTACULAR_SETTINGS = {

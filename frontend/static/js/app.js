@@ -79,7 +79,7 @@ const API = {
             ...options,
             headers: {
                 ...options.headers,
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `JWT ${token}`,
                 'Content-Type': 'application/json',
             }
         });

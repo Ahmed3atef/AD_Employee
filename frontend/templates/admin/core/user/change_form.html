@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+
+{% block after_field_sets %}
+    {{ block.super }}
+    <div class="card mt-3">
+        <div class="card-body">
+            <a href="{% url 'admin:change_ad_password' object_id=original.pk %}" class="btn btn-warning">
+                <i class="fas fa-key mr-1"></i> Change AD Password
+            </a>
+            <small class="text-muted ml-2">Change this user's password directly in Active Directory</small>
+        </div>
+    </div>
+{% endblock %}

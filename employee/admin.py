@@ -1,156 +1,443 @@
 import re
-from django.contrib import admin, messages
-from django.urls import path
-from django.shortcuts import redirect, render
-from django.db import transaction
-from django.core.paginator import Paginator
-from django.utils import timezone
-from django.contrib.admin.models import LogEntry, ADDITION, CHANGE
-from django.contrib.contenttypes.models import ContentType
-from datetime import datetime, timedelta
-from . import models
-from django.core.cache import cache
-from django.conf import settings 
-from django.contrib.auth import get_user_model
+import logging
 
+from django.contrib import admin, messages
+from django.contrib.admin.models import LogEntry, ADDITION
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
+from django.core.cache import cache
+from django.core.paginator import Paginator
+from django.db import transaction
+from django.shortcuts import redirect, render
+from django.urls import path
+from django.utils import timezone
+
+from . import models
+
+logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def get_clean_ldap_val(entry, attr_name):
+    """Extract a clean string value from an LDAP entry attribute."""
+    val = getattr(entry, attr_name, None)
+    if not val or val == [] or str(val).strip() == "":
+        return None
+    if isinstance(val, list):
+        return str(val[0]).strip()
+    return str(val).strip()
+
+
+def extract_ou_from_dn(dn):
+    """Return the first OU component from a Distinguished Name, or None."""
+    match = re.search(r'OU=([^,]+)', dn or "")
+    return match.group(1).strip() if match else None
+
+
+def get_ad_connection(request):
+    """
+    Retrieve cached AD credentials and return an authenticated AD connection.
+    Returns (ad_connection, error_message).  On success error_message is None.
+    """
+    creds = cache.get(f'ad_creds_{request.user.id}')
+    if not creds or not creds.get('username') or not creds.get('password'):
+        return None, "Credentials not found in cache. Please re-login."
+
+    ad = settings.ACTIVE_DIR
+    if not ad.connect_ad(creds['username'], creds['password']):
+        return None, "Failed to connect to AD with your credentials."
+
+    return ad, None
+
+
+def get_client_ip(request):
+    """Get the client IP address from the request."""
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+# ---------------------------------------------------------------------------
+# Simple model registrations
+# ---------------------------------------------------------------------------
 
 admin.site.register(models.Job)
 admin.site.register(models.Department)
 
+
+# ---------------------------------------------------------------------------
+# OUTransferLog Admin
+# ---------------------------------------------------------------------------
+
 @admin.register(models.OUTransferLog)
 class OUTransferLogAdmin(admin.ModelAdmin):
-    list_display = ('employee_username', 'employee_display_name', 'old_ou', 'new_ou', 
-                    'status', 'database_updated', 'performed_by', 'timestamp')
+    list_display = (
+        'employee_username', 'employee_display_name',
+        'old_ou', 'new_ou', 'status', 'database_updated',
+        'performed_by', 'timestamp',
+    )
     list_filter = ('status', 'database_updated', 'timestamp', 'performed_by')
     search_fields = ('employee_username', 'employee_display_name', 'old_ou', 'new_ou')
-    readonly_fields = ('performed_by', 'employee', 'employee_username', 'employee_display_name',
-                       'old_ou', 'new_ou', 'old_dn', 'new_dn', 'database_updated',
-                       'old_department', 'new_department', 'status', 'error_message',
-                       'ip_address', 'timestamp')
+    readonly_fields = (
+        'performed_by', 'employee', 'employee_username', 'employee_display_name',
+        'old_ou', 'new_ou', 'old_dn', 'new_dn', 'database_updated',
+        'old_department', 'new_department', 'status', 'error_message',
+        'ip_address', 'timestamp',
+    )
     ordering = ('-timestamp',)
     date_hierarchy = 'timestamp'
-    
+
     def has_add_permission(self, request):
-        # Logs are created automatically, not manually
         return False
-    
+
     def has_delete_permission(self, request, obj=None):
-        # Only superusers can delete audit logs
         return request.user.is_superuser
 
 
+# ---------------------------------------------------------------------------
+# Employee Admin
+# ---------------------------------------------------------------------------
+
 @admin.register(models.Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('user', 'full_name_en', 'full_name_ar', 'hire_date', 'nid', 'job_title', 'department')
+    list_display = (
+        'user', 'full_name_en', 'full_name_ar',
+        'hire_date', 'nid', 'job_title', 'department',
+    )
     list_filter = ('job_title', 'department')
     search_fields = ('user__username', 'full_name_en', 'full_name_ar')
     ordering = ('full_name_en',)
-    
+
+    # ------------------------------------------------------------------
+    # Custom URLs
+    # ------------------------------------------------------------------
+
     def get_urls(self):
-        """Register custom URLs within the Admin class."""
-        
-        urls = super().get_urls()
         custom_urls = [
-            path('sync-users/', self.admin_site.admin_view(self.sync_users_action), name='sync_users_action'),
-            path('transfer-ou/', self.admin_site.admin_view(self.transfer_ou_view), name='transfer_ou_page'),
+            path(
+                'sync-users/',
+                self.admin_site.admin_view(self.sync_users_view),
+                name='sync_users_action',
+            ),
+            path(
+                'transfer-ou/',
+                self.admin_site.admin_view(self.transfer_ou_view),
+                name='transfer_ou_page',
+            ),
         ]
-        return custom_urls + urls
-    
-    def sync_users_action(self, request):
-        cache_key = f'ad_creds_{request.user.id}'
-        creds = cache.get(cache_key)
-        
-        if not creds:
-            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
-            return redirect("admin:index")
-        
-        username = creds['username']
-        password = creds['password']
+        return custom_urls + super().get_urls()
 
-        if not username or not password:
-            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
+    # ------------------------------------------------------------------
+    # Sync Users from AD
+    # ------------------------------------------------------------------
+
+    def sync_users_view(self, request):
+        """Pull users from AD and sync to local DB — idempotent."""
+        ad, error = get_ad_connection(request)
+        if error:
+            self.message_user(request, error, level=messages.ERROR)
             return redirect("admin:index")
 
-        ad = settings.ACTIVE_DIR
-        if not ad.connect_ad(username, password):
-            self.message_user(request, "Failed to connect to AD with your credentials.", level=messages.ERROR)
-            return redirect("admin:index")
+        entries = ad.get_all_users_full_info(
+            attributes=['sAMAccountName', 'displayName', 'title'],
+        )
 
-        # Fetch entries
-        entries = ad.get_all_users_full_info(attributes=['sAMAccountName', 'displayName', 'title'])
-        
         sync_count = 0
+
         with transaction.atomic():
             for entry in entries:
-                if not hasattr(entry, 'sAMAccountName'):
+                sam = get_clean_ldap_val(entry, 'sAMAccountName')
+                if not sam:
                     continue
 
-                # 1. Robust Data Cleaner
-                def get_clean_val(attr_name):
-                    val = getattr(entry, attr_name, None)
-                    # If LDAP returns an empty list [], None, or empty string, return None
-                    if not val or val == [] or str(val).strip() == "":
-                        return None
-                    # If it's a list (common in LDAP), take the first item
-                    if isinstance(val, list):
-                        return str(val[0]).strip()
-                    return str(val).strip()
+                ad_username = sam.lower()
+                display_name = get_clean_ldap_val(entry, 'displayName')
+                job_title_str = get_clean_ldap_val(entry, 'title')
 
-                # 2. Parse Department from DN (e.g., CN=...,OU=Accountant,OU=New,...)
-                # We look for the first occurrence of OU=
-                dept_obj = None
+                # --- Resolve department from DN ---
                 dn = getattr(entry, 'entry_dn', "")
-                ou_match = re.search(r'OU=([^,]+)', dn) # Captures the first OU value before the next comma
-                
-                if ou_match:
-                    dept_name = ou_match.group(1).strip()
-                    # Per your requirement: Select only, do not create
-                    dept_obj = models.Department.objects.filter(name__iexact=dept_name).first()
+                dept_name = extract_ou_from_dn(dn)
+                dept_obj = (
+                    models.Department.objects.filter(name__iexact=dept_name).first()
+                    if dept_name else None
+                )
 
-                # 3. Get or Create Job (using cleaner)
-                job_title_str = get_clean_val('title')
+                # --- Resolve job title ---
                 job_obj = None
                 if job_title_str:
                     job_obj, _ = models.Job.objects.get_or_create(title=job_title_str)
 
-                # 4. Sync User
-                ad_username = get_clean_val('sAMAccountName').lower()
+                # --- Get or create the auth User ---
+                full_username = f'{ad_username}@{settings.DOMAIN}'
                 user_obj, _ = User.objects.get_or_create(
-                    username=f'{ad_username}@{settings.DOMAIN}',
-                    defaults={'is_active': True, 'is_staff': False}
+                    username=full_username,
+                    defaults={'is_active': True, 'is_staff': False},
                 )
 
-                # 5. Update/Create Employee Profile
-                # If dept_obj or job_obj is None, Django sets the field to NULL
-                models.Employee.objects.update_or_create(
-                    user=user_obj,
-                    defaults={
-                        'full_name_en': get_clean_val('displayName'),
-                        'department': dept_obj,
-                        'job_title': job_obj,
-                    }
-                )
-                sync_count += 1
+                # --- Check if Employee already exists with identical data ---
+                try:
+                    existing = models.Employee.objects.get(user=user_obj)
+                    # Compare current DB values with incoming AD values
+                    if (
+                        existing.full_name_en == display_name
+                        and existing.department_id == (dept_obj.id if dept_obj else None)
+                        and existing.job_title_id == (job_obj.id if job_obj else None)
+                    ):
+                        # Nothing changed — skip
+                        continue
 
-        self.message_user(request, f"Successfully synced {sync_count} users. Departments matched from DN.")
+                    # Something changed — update
+                    existing.full_name_en = display_name
+                    existing.department = dept_obj
+                    existing.job_title = job_obj
+                    existing.save(update_fields=['full_name_en', 'department', 'job_title'])
+                    sync_count += 1
+
+                except models.Employee.DoesNotExist:
+                    # Brand-new employee
+                    models.Employee.objects.create(
+                        user=user_obj,
+                        full_name_en=display_name,
+                        department=dept_obj,
+                        job_title=job_obj,
+                    )
+                    sync_count += 1
+
+        self.message_user(
+            request,
+            f"Successfully synced {sync_count} users. Departments matched from DN.",
+        )
         return redirect("admin:index")
-    
-    def get_client_ip(self, request):
-        """Get client IP address from request"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
-    
-    def create_audit_log(self, request, username, display_name, old_ou, new_ou, 
-                        old_dn, new_dn, status, database_updated, 
-                        old_dept=None, new_dept=None, employee=None, error_message=None):
-        """Create an audit log entry and Django admin log entry"""
-        
-        # Create OUTransferLog
+
+    # ------------------------------------------------------------------
+    # Transfer OU  (GET = search, POST = transfer)
+    # ------------------------------------------------------------------
+
+    def transfer_ou_view(self, request):
+        """Handle user search (GET) and OU transfer (POST)."""
+        ad, error = get_ad_connection(request)
+        if error:
+            self.message_user(request, error, level=messages.ERROR)
+            return redirect("admin:index")
+
+        context = self._build_transfer_context(request)
+
+        if request.method == 'POST':
+            return self._handle_transfer_post(request, ad, context)
+
+        return self._handle_transfer_get(request, ad, context)
+
+    # ---- context builder ----
+
+    def _build_transfer_context(self, request):
+        """Build the shared context dict for the transfer OU page."""
+        audit_qs = models.OUTransferLog.objects.select_related(
+            'performed_by', 'employee', 'old_department', 'new_department',
+        ).all()
+
+        month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0)
+        stats = {
+            'total': audit_qs.count(),
+            'success': audit_qs.filter(status='success').count(),
+            'failed': audit_qs.filter(status='failed').count(),
+            'this_month': audit_qs.filter(timestamp__gte=month_start).count(),
+        }
+
+        paginator = Paginator(audit_qs, 20)
+        page = request.GET.get('page', 1)
+
+        return {
+            **self.admin_site.each_context(request),
+            'title': 'Transfer OU',
+            'departments': models.Department.objects.order_by('name'),
+            'audit_logs': paginator.get_page(page),
+            'stats': stats,
+        }
+
+    # ---- GET handler ----
+
+    def _handle_transfer_get(self, request, ad, context):
+        """Search for a user in AD and populate context."""
+        search_username = request.GET.get('username', '').strip()
+        if not search_username:
+            return render(request, 'admin/transfer_ou.html', context)
+
+        clean_username = search_username.split('@')[0]
+        entries = ad.search_user_full_info(
+            clean_username,
+            attributes=['sAMAccountName', 'displayName', 'title', 'distinguishedName'],
+        )
+
+        if not entries:
+            self.message_user(
+                request,
+                f"User '{search_username}' not found in Active Directory.",
+                level=messages.ERROR,
+            )
+            context['username'] = search_username
+            return render(request, 'admin/transfer_ou.html', context)
+
+        entry = entries[0]
+        dn = get_clean_ldap_val(entry, 'distinguishedName') or entry.entry_dn
+        current_ou = extract_ou_from_dn(dn) or "Unknown"
+
+        # Try fetching DB info
+        db_dept, db_job = None, None
+        user_obj = User.objects.filter(username__icontains=clean_username).first()
+        if user_obj and hasattr(user_obj, 'employee_profile'):
+            emp = user_obj.employee_profile
+            db_dept = emp.department.name if emp.department else None
+            db_job = emp.job_title.title if emp.job_title else None
+
+        context['user_info'] = {
+            'username': get_clean_ldap_val(entry, 'sAMAccountName') or clean_username,
+            'display_name': get_clean_ldap_val(entry, 'displayName') or 'N/A',
+            'current_ou': current_ou,
+            'dn': dn,
+            'job_title': db_job or get_clean_ldap_val(entry, 'title'),
+            'department': db_dept or current_ou,
+        }
+        context['username'] = search_username
+        return render(request, 'admin/transfer_ou.html', context)
+
+    # ---- POST handler ----
+
+    def _handle_transfer_post(self, request, ad, context):
+        """Execute the OU transfer and create audit log."""
+        target_username = request.POST.get('username', '').strip()
+        new_ou = request.POST.get('new_ou', '').strip()
+        update_db = request.POST.get('update_db') == 'on'
+        old_ou = request.POST.get('current_ou', '').strip()
+        old_dn = request.POST.get('current_dn', '').strip()
+        display_name = request.POST.get('display_name', '').strip()
+
+        if not target_username or not new_ou:
+            self.message_user(request, "Username and OU are required.", level=messages.ERROR)
+            return render(request, 'admin/transfer_ou.html', context)
+
+        clean_username = target_username.split('@')[0]
+
+        # Resolve DB objects
+        employee_obj, old_dept_obj, new_dept_obj = None, None, None
+        user_obj = User.objects.filter(username__icontains=clean_username).first()
+        if user_obj and hasattr(user_obj, 'employee_profile'):
+            employee_obj = user_obj.employee_profile
+            old_dept_obj = employee_obj.department
+
+        transfer_status = 'failed'
+        error_msg = None
+        new_dn = None
+
+        try:
+            success = ad.update_ou(clean_username, new_ou)
+
+            if success:
+                new_dn = self._build_new_dn(old_dn, new_ou)
+
+                if update_db:
+                    transfer_status, error_msg, new_dept_obj = self._update_db_department(
+                        request, employee_obj, target_username, new_ou,
+                    )
+                else:
+                    transfer_status = 'success'
+                    self.message_user(
+                        request,
+                        f"Successfully transferred {target_username} to {new_ou} in Active Directory.",
+                        level=messages.SUCCESS,
+                    )
+            else:
+                error_msg = "AD transfer operation failed"
+                self.message_user(
+                    request,
+                    f"Failed to transfer {target_username}. Check logs for details.",
+                    level=messages.ERROR,
+                )
+        except Exception as exc:
+            error_msg = str(exc)
+            self.message_user(request, f"Error during transfer: {exc}", level=messages.ERROR)
+
+        self._create_audit_log(
+            request=request,
+            username=clean_username,
+            display_name=display_name,
+            old_ou=old_ou,
+            new_ou=new_ou,
+            old_dn=old_dn,
+            new_dn=new_dn,
+            status=transfer_status,
+            database_updated=update_db and transfer_status in ('success', 'partial'),
+            old_dept=old_dept_obj,
+            new_dept=new_dept_obj,
+            employee=employee_obj,
+            error_message=error_msg,
+        )
+
+        return redirect('admin:transfer_ou_page')
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_new_dn(old_dn, new_ou):
+        """Construct the new DN after an OU transfer."""
+        cn_match = re.match(r'CN=([^,]+)', old_dn or "")
+        if not cn_match:
+            return None
+        cn = cn_match.group(1)
+        return f"CN={cn},OU={new_ou},{settings.CONTAINER_DN_BASE}"
+
+    def _update_db_department(self, request, employee_obj, target_username, new_ou):
+        """
+        Update the employee's department in the DB after an AD transfer.
+        Returns (status, error_message, new_dept_obj).
+        """
+        if not employee_obj:
+            self.message_user(
+                request,
+                f"Transferred in AD but user not found in database. Run 'Sync Users' to update.",
+                level=messages.WARNING,
+            )
+            return 'partial', "User not found in database", None
+
+        new_dept_obj = models.Department.objects.filter(name__iexact=new_ou).first()
+
+        if not new_dept_obj:
+            self.message_user(
+                request,
+                f"Transferred in AD but department '{new_ou}' not found in database. Please create it first.",
+                level=messages.WARNING,
+            )
+            return 'partial', f"Department '{new_ou}' not found in database", None
+
+        try:
+            employee_obj.department = new_dept_obj
+            employee_obj.save(update_fields=['department'])
+            self.message_user(
+                request,
+                f"Successfully transferred {target_username} to {new_ou} in both AD and database.",
+                level=messages.SUCCESS,
+            )
+            return 'success', None, new_dept_obj
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Transferred in AD but database update failed: {exc}",
+                level=messages.WARNING,
+            )
+            return 'partial', str(exc), None
+
+    def _create_audit_log(self, *, request, username, display_name, old_ou, new_ou,
+                          old_dn, new_dn, status, database_updated,
+                          old_dept=None, new_dept=None, employee=None,
+                          error_message=None):
+        """Create an OUTransferLog entry and a Django admin LogEntry."""
         log = models.OUTransferLog.objects.create(
             performed_by=request.user,
             employee=employee,
@@ -165,258 +452,16 @@ class EmployeeAdmin(admin.ModelAdmin):
             new_department=new_dept,
             status=status,
             error_message=error_message,
-            ip_address=self.get_client_ip(request)
+            ip_address=get_client_ip(request),
         )
-        
-        # Create Django admin LogEntry for Recent Actions
+
         LogEntry.objects.log_action(
             user_id=request.user.pk,
             content_type_id=ContentType.objects.get_for_model(models.OUTransferLog).pk,
             object_id=log.pk,
             object_repr=f"{display_name or username}: {old_ou} → {new_ou}",
             action_flag=ADDITION,
-            change_message=f"OU Transfer: {old_ou} → {new_ou} ({status})"
+            change_message=f"OU Transfer: {old_ou} → {new_ou} ({status})",
         )
-        
+
         return log
-    
-    def transfer_ou_view(self, request):
-        """Handle both GET (search) and POST (transfer) for Transfer OU page"""
-        
-        # Get AD credentials from cache
-        cache_key = f'ad_creds_{request.user.id}'
-        creds = cache.get(cache_key)
-        
-        if not creds:
-            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
-            return redirect("admin:index")
-        
-        username = creds['username']
-        password = creds['password']
-
-        if not username or not password:
-            self.message_user(request, "Credentials not found in cache. Please re-login.", level=messages.ERROR)
-            return redirect("admin:index")
-
-        # Initialize AD connection
-        ad = settings.ACTIVE_DIR
-        if not ad.connect_ad(username, password):
-            self.message_user(request, "Failed to connect to AD with your credentials.", level=messages.ERROR)
-            return redirect("admin:index")
-
-        # Get audit logs with pagination
-        audit_logs_list = models.OUTransferLog.objects.select_related(
-            'performed_by', 'employee', 'old_department', 'new_department'
-        ).all()
-        
-        # Calculate statistics
-        stats = {
-            'total': audit_logs_list.count(),
-            'success': audit_logs_list.filter(status='success').count(),
-            'failed': audit_logs_list.filter(status='failed').count(),
-            'this_month': audit_logs_list.filter(
-                timestamp__gte=timezone.now().replace(day=1, hour=0, minute=0, second=0)
-            ).count(),
-        }
-        
-        # Pagination
-        paginator = Paginator(audit_logs_list, 20)  # 20 records per page
-        page_number = request.GET.get('page', 1)
-        audit_logs = paginator.get_page(page_number)
-
-        context = {
-            **self.admin_site.each_context(request),
-            "title": "Transfer OU",
-            "departments": models.Department.objects.all().order_by('name'),
-            "audit_logs": audit_logs,
-            "stats": stats,
-        }
-
-        # Handle POST request (Transfer action)
-        if request.method == 'POST':
-            target_username = request.POST.get('username', '').strip()
-            new_ou = request.POST.get('new_ou', '').strip()
-            update_db = request.POST.get('update_db') == 'on'
-            old_ou = request.POST.get('current_ou', '').strip()
-            old_dn = request.POST.get('current_dn', '').strip()
-            display_name = request.POST.get('display_name', '').strip()
-
-            if not target_username or not new_ou:
-                self.message_user(request, "Username and OU are required.", level=messages.ERROR)
-                return render(request, 'admin/transfer_ou.html', context)
-
-            # Clean username (remove @domain if present)
-            clean_username = target_username.split('@')[0]
-            
-            # Variables for audit log
-            employee_obj = None
-            old_dept_obj = None
-            new_dept_obj = None
-            transfer_status = 'failed'
-            error_msg = None
-            new_dn = None
-
-            try:
-                # Find employee in database
-                user_obj = User.objects.filter(username__icontains=clean_username).first()
-                if user_obj and hasattr(user_obj, 'employee_profile'):
-                    employee_obj = user_obj.employee_profile
-                    old_dept_obj = employee_obj.department
-                
-                # Perform the OU transfer in Active Directory
-                success = ad.update_ou(clean_username, new_ou)
-                
-                if success:
-                    # Construct new DN
-                    cn_match = re.match(r'CN=([^,]+)', old_dn)
-                    if cn_match:
-                        cn = cn_match.group(1)
-                        base_container = settings.CONTAINER_DN_BASE
-                        new_dn = f"CN={cn},OU={new_ou},{base_container}"
-                    
-                    # Update database if requested
-                    if update_db:
-                        try:
-                            if employee_obj:
-                                # Find the department
-                                new_dept_obj = models.Department.objects.filter(name__iexact=new_ou).first()
-                                
-                                if new_dept_obj:
-                                    employee_obj.department = new_dept_obj
-                                    employee_obj.save()
-                                    transfer_status = 'success'
-                                    
-                                    self.message_user(
-                                        request, 
-                                        f"Successfully transferred {target_username} to {new_ou} in both AD and database.",
-                                        level=messages.SUCCESS
-                                    )
-                                else:
-                                    transfer_status = 'partial'
-                                    error_msg = f"Department '{new_ou}' not found in database"
-                                    self.message_user(
-                                        request, 
-                                        f"Transferred in AD but department '{new_ou}' not found in database. Please create it first.",
-                                        level=messages.WARNING
-                                    )
-                            else:
-                                transfer_status = 'partial'
-                                error_msg = "User not found in database"
-                                self.message_user(
-                                    request, 
-                                    f"Transferred in AD but user not found in database. Run 'Sync Users' to update.",
-                                    level=messages.WARNING
-                                )
-                        except Exception as db_error:
-                            transfer_status = 'partial'
-                            error_msg = str(db_error)
-                            self.message_user(
-                                request, 
-                                f"Transferred in AD but database update failed: {str(db_error)}",
-                                level=messages.WARNING
-                            )
-                    else:
-                        transfer_status = 'success'
-                        self.message_user(
-                            request, 
-                            f"Successfully transferred {target_username} to {new_ou} in Active Directory.",
-                            level=messages.SUCCESS
-                        )
-                else:
-                    error_msg = "AD transfer operation failed"
-                    self.message_user(
-                        request, 
-                        f"Failed to transfer {target_username}. Check logs for details.",
-                        level=messages.ERROR
-                    )
-                    
-            except Exception as e:
-                error_msg = str(e)
-                self.message_user(
-                    request, 
-                    f"Error during transfer: {str(e)}",
-                    level=messages.ERROR
-                )
-            
-            # Create audit log
-            self.create_audit_log(
-                request=request,
-                username=clean_username,
-                display_name=display_name,
-                old_ou=old_ou,
-                new_ou=new_ou,
-                old_dn=old_dn,
-                new_dn=new_dn,
-                status=transfer_status,
-                database_updated=update_db and transfer_status in ['success', 'partial'],
-                old_dept=old_dept_obj,
-                new_dept=new_dept_obj,
-                employee=employee_obj,
-                error_message=error_msg
-            )
-            
-            # Redirect to audit tab to show the new log
-            return redirect('admin:transfer_ou_page')
-
-        # Handle GET request (Search for user)
-        search_username = request.GET.get('username', '').strip()
-        
-        if search_username:
-            # Clean username
-            clean_username = search_username.split('@')[0]
-            
-            # Search in AD
-            entries = ad.search_user_full_info(
-                clean_username, 
-                attributes=['sAMAccountName', 'displayName', 'title', 'distinguishedName']
-            )
-            
-            if entries and len(entries) > 0:
-                entry = entries[0]
-                
-                # Helper function to get clean values
-                def get_clean_val(attr_name):
-                    val = getattr(entry, attr_name, None)
-                    if not val or val == [] or str(val).strip() == "":
-                        return None
-                    if isinstance(val, list):
-                        return str(val[0]).strip()
-                    return str(val).strip()
-                
-                # Extract current OU from DN
-                dn = get_clean_val('distinguishedName') or entry.entry_dn
-                current_ou = "Unknown"
-                ou_match = re.search(r'OU=([^,]+)', dn)
-                if ou_match:
-                    current_ou = ou_match.group(1).strip()
-                
-                # Try to get database info
-                db_dept = None
-                db_job = None
-                try:
-                    user_obj = User.objects.filter(username__icontains=clean_username).first()
-                    if user_obj and hasattr(user_obj, 'employee_profile'):
-                        employee = user_obj.employee_profile
-                        db_dept = employee.department.name if employee.department else None
-                        db_job = employee.job_title.title if employee.job_title else None
-                except Exception:
-                    pass
-                
-                context['user_info'] = {
-                    'username': get_clean_val('sAMAccountName') or clean_username,
-                    'display_name': get_clean_val('displayName') or 'N/A',
-                    'current_ou': current_ou,
-                    'dn': dn,
-                    'job_title': db_job or get_clean_val('title'),
-                    'department': db_dept or current_ou,
-                }
-                context['username'] = search_username
-            else:
-                self.message_user(
-                    request, 
-                    f"User '{search_username}' not found in Active Directory.",
-                    level=messages.ERROR
-                )
-                context['username'] = search_username
-
-        return render(request, 'admin/transfer_ou.html', context)

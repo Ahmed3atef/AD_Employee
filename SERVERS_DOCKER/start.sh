@@ -1,92 +1,81 @@
 #!/bin/bash
-# Startup script for Assessment Environment
+# Start all dev servers (AD + MSSQL)
+# You can also run them individually:
+#   ./start-ad.sh   — Active Directory only
+#   ./start-db.sh   — MS SQL Server only
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "========================================="
-echo "Assessment Environment Setup"
+echo " Starting Dev Environment (AD + MSSQL)"
 echo "========================================="
 echo ""
 
-# Make initialization scripts executable
-echo "Making initialization scripts executable..."
-chmod +x init-db.sh init-ad.sh
+# Make all scripts executable
+chmod +x "$SCRIPT_DIR"/*.sh
 
-# Start Docker Compose
+# Start both containers at once
+docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d
+
+# --- Wait for MSSQL health ---
 echo ""
-echo "Starting Docker containers..."
-docker-compose up -d
+echo "[MSSQL] Waiting for health check..."
+MAX_WAIT=90
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    STATUS=$(docker inspect -f '{{.State.Health.Status}}' mssql_server 2>/dev/null || echo "starting")
+    if [ "$STATUS" = "healthy" ]; then
+        echo "[MSSQL] ✓ Healthy (${WAITED}s)"
+        break
+    fi
+    sleep 5
+    WAITED=$((WAITED + 5))
+    echo "[MSSQL]   Waiting... (${WAITED}s) - $STATUS"
+done
+if [ $WAITED -ge $MAX_WAIT ]; then
+    echo "[MSSQL] ⚠ Not healthy after ${MAX_WAIT}s — check: docker logs mssql_server"
+fi
 
+# --- Wait for AD health ---
 echo ""
-echo "Waiting for services to initialize..."
-echo "MS SQL Server: Initializing (30 seconds)..."
-sleep 30
+echo "[AD] Waiting for health check..."
+MAX_WAIT=120
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    STATUS=$(docker inspect -f '{{.State.Health.Status}}' ad_server 2>/dev/null || echo "starting")
+    if [ "$STATUS" = "healthy" ]; then
+        echo "[AD] ✓ Healthy (${WAITED}s)"
+        break
+    fi
+    sleep 5
+    WAITED=$((WAITED + 5))
+    echo "[AD]   Waiting... (${WAITED}s) - $STATUS"
+done
+if [ $WAITED -ge $MAX_WAIT ]; then
+    echo "[AD] ⚠ Not healthy after ${MAX_WAIT}s — check: docker logs ad_server"
+fi
 
-echo "Active Directory: Initializing (90 seconds)..."
-sleep 90
-
-echo ""
-echo "========================================="
-echo "Services Status"
-echo "========================================="
-docker-compose ps
-
-echo ""
-echo "========================================="
-echo "Checking Container Health"
-echo "========================================="
+# --- Initialize AD structure ---
 AD_RUNNING=$(docker inspect -f '{{.State.Running}}' ad_server 2>/dev/null)
-MSSQL_RUNNING=$(docker inspect -f '{{.State.Running}}' mssql_server 2>/dev/null)
-
-if [ "$AD_RUNNING" != "true" ]; then
-    echo "WARNING: AD Server is not running!"
-    echo "Check logs with: docker-compose logs ad_server"
-else
-    echo "✓ AD Server is running"
-fi
-
-if [ "$MSSQL_RUNNING" != "true" ]; then
-    echo "WARNING: MS SQL Server is not running!"
-    echo "Check logs with: docker-compose logs mssql_server"
-else
-    echo "✓ MS SQL Server is running"
-fi
-
-echo ""
-echo "========================================="
-echo "Initializing Active Directory Structure"
-echo "========================================="
 if [ "$AD_RUNNING" = "true" ]; then
+    echo ""
+    echo "[AD] Initializing OUs and users..."
     docker exec ad_server /bin/bash /init-ad.sh
-else
-    echo "Skipping AD initialization - container not running"
 fi
 
 echo ""
 echo "========================================="
-echo "Verifying MS SQL Database"
-echo "========================================="
-if [ "$MSSQL_RUNNING" = "true" ]; then
-    docker exec mssql_server /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "SaPass@ADIWA" -Q "SELECT name FROM sys.databases WHERE name = 'adiwa_db'" -C
-else
-    echo "Skipping database verification - container not running"
-fi
-
-echo ""
-echo "========================================="
-echo "Setup Complete!"
+echo " Dev Environment Ready"
 echo "========================================="
 echo ""
-echo "MS SQL Server:"
-echo "  - Host: localhost"
-echo "  - Port: 1433"
-echo "  - Database: adiwa_db"
-echo "  - User: sa"
-echo "  - Password: SaPass@ADIWA"
+echo " MS SQL Server:"
+echo "   Host: localhost:1433"
+echo "   DB:   adiwa_db | User: sa | Pass: SaPass@ADIWA"
 echo ""
-echo "Active Directory:"
-echo "  - Domain: eissa.local"
-echo "  - LDAP: ldap://localhost:389"
-echo "  - Base DN: DC=eissa,DC=local"
-echo "  - Admin: Administrator@eissa.local"
-echo "  - Password: Admin@123456"
-echo ""
+echo " Active Directory:"
+echo "   LDAP: ldap://localhost:389"
+echo "   Domain: eissa.local | Admin: Administrator@eissa.local"
+echo "   Admin Pass: Admin@123456"
 echo "========================================="

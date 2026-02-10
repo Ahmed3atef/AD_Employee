@@ -7,7 +7,10 @@ A Django-based web application that integrates with Microsoft Active Directory (
 ### Core Features
 - **Active Directory Authentication**: Authenticate users against your AD infrastructure
 - **Employee Management**: Manage employee profiles with AD synchronization
-- **OU Transfer**: Transfer employees between Organizational Units with audit logging
+- **Create AD Users**: Create new users directly in Active Directory from the admin panel
+- **Change AD Passwords**: Reset user passwords in Active Directory without storing credentials locally
+- **OU Transfer**: Transfer employees between Organizational Units with full audit logging
+- **Idempotent User Sync**: Sync users from AD — only new or changed records are updated
 - **Department Management**: Organize employees by departments mapped to AD OUs
 - **Job Title Management**: Track employee job titles synced from AD
 - **Comprehensive Audit Logging**: Track all OU transfer operations with detailed logs
@@ -21,6 +24,7 @@ A Django-based web application that integrates with Microsoft Active Directory (
 - Admin interface with Jazzmin theme
 - Real-time AD user synchronization
 - Cached credential storage for AD operations
+- Docker-based development environment with health-check polling
 
 ## 🏗️ Architecture
 
@@ -71,10 +75,10 @@ A Django-based web application that integrates with Microsoft Active Directory (
 ## 🚀 Installation
 
 ### Using Docker Compose (Recommended)
-- require a AD server 
+- Requires an AD server
 
-1- Make sure you have docker and docker-compose installed on your system
-and create `docker-compose.yml` file with this script:
+1- Make sure you have Docker and Docker Compose installed on your system
+and create a `docker-compose.yml` file with this script:
 
 ```docker-compose
 services:
@@ -160,14 +164,14 @@ volumes:
   mssql_data:
 ```
 
-2- run this command:
+2- Run this command:
 ```bash
 docker-compose up -d
 ```
 
 
 ### Using Docker
-- require a AD server 
+- Requires an AD server
 
 This setup uses Docker Compose to run the Active Directory (AD) server, MS SQL Server, and the Django application, creating a complete local development environment.
 
@@ -304,25 +308,44 @@ DC=eissa,DC=local
 #### Required AD Permissions
 The service account needs:
 - Read access to user objects
+- Write access to create new user objects
 - Modify DN permission for OU transfers
+- Password reset permission for changing user passwords
 - Read access to organizational units
 
 ## 📖 Usage
 
 ### Admin Panel
 
+#### Create AD User
+1. Login to admin panel: http://localhost:8000/admin
+2. Navigate to **Users**
+3. Click the **"Create AD User"** button
+4. Fill in the form: username, password, first/last name, email, phone, OU
+5. Click **"Create AD User"** — the user is created directly in Active Directory
+6. The password is sent to AD only — **it is NOT stored in the database**
+7. Run **"Sync Users"** afterward to pull the new user into the local database
+
+#### Change AD Password
+1. Navigate to **Users** → click on a user
+2. Click the **"Change AD Password"** button
+3. Enter the new password and confirm it
+4. Click **"Change Password"** — the password is changed directly in Active Directory
+5. The password is **never stored** in the Django database
+
 #### Sync Users from AD
 1. Login to admin panel: http://localhost:8000/admin
-2. Navigate to "Active Directory Operations"
-3. Click "Sync Users" button
+2. Navigate to **Employees**
+3. Click **"Sync Users"** button
 4. Users from AD will be synchronized to the database
+5. **Idempotent**: syncing twice without AD changes will report `Successfully synced 0 users`
 
 #### Transfer User OU
-1. Navigate to "Employee" → "Transfer OU"
+1. Navigate to **Employees** → **"Transfer OU"**
 2. Search for user by username
 3. Select new OU from dropdown
 4. Choose whether to update database department
-5. Click "Transfer Employee"
+5. Click **"Transfer Employee"**
 6. View transfer in audit log
 
 ### API Endpoints
@@ -353,7 +376,7 @@ POST /api/auth/login/
 ```bash
 # Get authenticated user's profile
 GET /api/employee/profile/
-Authorization: Bearer <access-token>
+Authorization: JWT <access-token>
 
 # Response
 {
@@ -404,51 +427,59 @@ Interactive API documentation is available at:
 ## 📁 Project Structure
 
 ```
-ADIWA/
-├── ADIWA/                      # Main Django project
+AD_Employee/
+├── ADIWA/                          # Main Django project
 │   ├── __init__.py
-│   ├── settings.py            # Django settings
-│   ├── urls.py                # URL routing
-│   ├── wsgi.py                # WSGI application
-│   ├── asgi.py                # ASGI application
-│   └── ad_conn.py             # AD connection handler
-├── core/                       # Authentication app
-│   ├── models.py              # User model
-│   ├── views.py               # Login view
-│   ├── serializers.py         # API serializers
-│   ├── auth_backends.py       # AD authentication backend
-│   └── urls.py                # Core URLs
-├── employee/                   # Employee management app
-│   ├── models.py              # Employee, Department, Job models
-│   ├── views.py               # Employee API views
-│   ├── admin.py               # Admin customizations
-│   ├── serializers.py         # Employee serializers
-│   └── urls.py                # Employee URLs
-├── frontend/                   # Frontend assets
+│   ├── settings.py                 # Django settings
+│   ├── urls.py                     # URL routing
+│   ├── wsgi.py                     # WSGI application
+│   ├── asgi.py                     # ASGI application
+│   └── ad_conn.py                  # AD connection handler (LDAP operations)
+├── core/                           # Authentication app
+│   ├── models.py                   # Custom User model
+│   ├── admin.py                    # User admin (Create AD User, Change AD Password)
+│   ├── views.py                    # Login view
+│   ├── serializers.py              # API serializers
+│   ├── auth_backends.py            # AD authentication backend
+│   └── urls.py                     # Core URLs
+├── employee/                       # Employee management app
+│   ├── models.py                   # Employee, Department, Job, OUTransferLog models
+│   ├── admin.py                    # Employee admin (Sync Users, Transfer OU)
+│   ├── views.py                    # Employee API views
+│   ├── serializers.py              # Employee serializers
+│   └── urls.py                     # Employee URLs
+├── frontend/                       # Frontend assets
 │   ├── static/
 │   │   ├── css/
-│   │   │   └── style.css      # Styles
+│   │   │   └── style.css           # Custom styles
 │   │   └── js/
-│   │       └── app.js         # Main JavaScript app
+│   │       └── app.js              # Main JavaScript app
 │   └── templates/
 │       ├── base.html
 │       ├── index.html
 │       └── admin/
 │           ├── index.html
-│           └── transfer_ou.html
-├── SERVERS_DOCKER/             # Development AD/DB servers
-│   ├── docker-compose.yml
-│   ├── init-ad.sh
-│   ├── init-db.sh
-│   ├── start.sh
-│   ├── test.sh
-│   └── cleanup.sh
-├── manage.py                   # Django management
-├── Dockerfile                  # Docker build file
-├── docker-compose.yml          # Production compose
-├── requirements.txt            # Python dependencies
-├── .env                        # Environment variables
-└── README.md                   # This file
+│           ├── transfer_ou.html
+│           ├── create_ad_user.html          # Create AD User form
+│           ├── change_ad_password.html      # Change AD Password form
+│           └── core/user/
+│               ├── change_list.html         # User list (Create AD User button)
+│               └── change_form.html         # User edit (Change AD Password button)
+├── SERVERS_DOCKER/                 # Development AD/DB servers
+│   ├── docker-compose.yml          # AD + MSSQL service definitions
+│   ├── init-ad.sh                  # AD initialization (OUs + sample users)
+│   ├── init-db.sh                  # Database initialization
+│   ├── start.sh                    # Start all services (parallel)
+│   ├── start-ad.sh                 # Start AD server only
+│   ├── start-db.sh                 # Start MSSQL server only
+│   ├── test.sh                     # Test services (supports: ad, db, all)
+│   └── cleanup.sh                  # Cleanup (supports: ad, db, all)
+├── manage.py                       # Django management
+├── Dockerfile                      # Docker build file
+├── docker-compose.yml              # Production compose
+├── requirements.txt                # Python dependencies
+├── .env                            # Environment variables
+└── README.md                       # This file
 ```
 
 ## 🔧 Development
@@ -471,20 +502,42 @@ DEBUG=True python manage.py runserver
 
 ### Development Servers (AD + MS SQL)
 
-For local development, you can use the Docker-based AD and MS SQL servers:
+For local development, the `SERVERS_DOCKER` directory provides Docker-based AD and MS SQL servers with **health-check polling** (no hardcoded sleeps):
 
 ```bash
 cd SERVERS_DOCKER
 
-# Start servers
+# Start both services (parallel, fastest)
 ./start.sh
 
-# Test servers
-./test.sh
+# Or start individually
+./start-ad.sh     # AD server only
+./start-db.sh     # MSSQL server only
 
-# Cleanup (removes all data)
-./cleanup.sh
+# Test services
+./test.sh          # Test all
+./test.sh ad       # Test AD only
+./test.sh db       # Test MSSQL only
+
+# Cleanup
+./cleanup.sh       # Remove all
+./cleanup.sh ad    # Remove AD only
+./cleanup.sh db    # Remove MSSQL only
 ```
+
+### AD Connection Methods
+
+The `ADConnection` class (`ADIWA/ad_conn.py`) provides the following methods:
+
+| Method | Description |
+|--------|-------------|
+| `connect_ad(username, password)` | Authenticate with AD using LDAP |
+| `get_all_users_full_info(attributes)` | Retrieve all users from AD |
+| `search_user_full_info(username, attributes)` | Search for a specific user |
+| `search_user_dn(username)` | Get a user's Distinguished Name |
+| `update_ou(username, new_ou)` | Transfer a user to a different OU |
+| `create_user(username, password, ...)` | Create a new user in AD |
+| `change_password(username, new_password)` | Change a user's AD password |
 
 ### Code Style
 

@@ -1,45 +1,50 @@
 #!/bin/bash
-# Test script to verify MS SQL and AD services
+# Test script — verify dev services
+# Usage: ./test.sh         (test all)
+#        ./test.sh ad      (test AD only)
+#        ./test.sh db      (test MSSQL only)
 
-echo "========================================="
-echo "Service Test Script"
-echo "========================================="
-echo ""
+TARGET="${1:-all}"
 
-# Test MS SQL Server
-echo "Testing MS SQL Server..."
-echo "Attempting to connect and list databases..."
-docker exec mssql_server /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "SaPass@ADIWA" -Q "SELECT name FROM sys.databases" -C
-
-if [ $? -eq 0 ]; then
-    echo "✓ MS SQL Server is working!"
-else
-    echo "✗ MS SQL Server connection failed"
-fi
-
-echo ""
-echo "========================================="
-echo ""
-
-# Test AD Server
-echo "Testing Active Directory Server..."
-AD_RUNNING=$(docker inspect -f '{{.State.Running}}' ad_server 2>/dev/null)
-
-if [ "$AD_RUNNING" = "true" ]; then
-    echo "✓ AD Server container is running"
+test_db() {
+    echo "=== Testing MS SQL Server ==="
+    MSSQL_RUNNING=$(docker inspect -f '{{.State.Running}}' mssql_server 2>/dev/null)
+    if [ "$MSSQL_RUNNING" = "true" ]; then
+        echo "✓ Container is running"
+        docker exec mssql_server /opt/mssql-tools18/bin/sqlcmd \
+            -S localhost -U sa -P "SaPass@ADIWA" \
+            -Q "SELECT name FROM sys.databases" -C
+        [ $? -eq 0 ] && echo "✓ MS SQL connection OK" || echo "✗ MS SQL connection failed"
+    else
+        echo "✗ mssql_server container is not running"
+    fi
     echo ""
-    echo "Listing Samba users..."
-    docker exec ad_server samba-tool user list
-    echo ""
-    echo "Listing OUs..."
-    docker exec ad_server samba-tool ou list
-else
-    echo "✗ AD Server is not running"
-    echo "Checking logs..."
-    docker-compose logs ad_server | tail -20
-fi
+}
 
-echo ""
-echo "========================================="
-echo "Test Complete"
-echo "========================================="
+test_ad() {
+    echo "=== Testing Active Directory ==="
+    AD_RUNNING=$(docker inspect -f '{{.State.Running}}' ad_server 2>/dev/null)
+    if [ "$AD_RUNNING" = "true" ]; then
+        echo "✓ Container is running"
+        echo ""
+        echo "Users:"
+        docker exec ad_server samba-tool user list
+        echo ""
+        echo "OUs:"
+        docker exec ad_server samba-tool ou list
+    else
+        echo "✗ ad_server container is not running"
+    fi
+    echo ""
+}
+
+case "$TARGET" in
+    db)   test_db ;;
+    ad)   test_ad ;;
+    all|*)
+        test_db
+        test_ad
+        ;;
+esac
+
+echo "=== Test Complete ==="

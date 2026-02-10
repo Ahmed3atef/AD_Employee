@@ -1,0 +1,147 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Create AD User - {{ site_title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-md-10">
+
+            <div class="mb-4">
+                <h1><i class="fas fa-user-plus"></i> Create AD User</h1>
+                <p class="text-muted">Create a new user directly in Active Directory. The password will NOT be stored in the database.</p>
+            </div>
+
+            <div class="alert alert-info d-flex align-items-start mb-4">
+                <i class="fas fa-info-circle mt-1 mr-2"></i>
+                <div>
+                    <strong>Note:</strong> This form creates the user in Active Directory only.
+                    To also create a local database record, use <strong>Sync Users</strong> after creating the user.
+                    The password must meet AD complexity requirements (min 7 chars, mix of uppercase, lowercase, numbers).
+                </div>
+            </div>
+
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert {% if message.tags == 'success' %}alert-success{% elif message.tags == 'error' %}alert-danger{% else %}alert-warning{% endif %} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <h5 class="mb-3 text-primary border-bottom pb-2">
+                            <i class="fas fa-key mr-1"></i> Account Information
+                        </h5>
+
+                        <div class="form-group">
+                            <label for="id_username">Username <span class="text-danger">*</span></label>
+                            {{ form.username }}
+                            {% if form.username.errors %}
+                                {% for error in form.username.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.username.help_text }}</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="id_password">Password <span class="text-danger">*</span></label>
+                            {{ form.password }}
+                            {% if form.password.errors %}
+                                {% for error in form.password.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.password.help_text }}</small>
+                        </div>
+
+                        <h5 class="mt-4 mb-3 text-primary border-bottom pb-2">
+                            <i class="fas fa-user mr-1"></i> Personal Information
+                        </h5>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="id_given_name">First Name <span class="text-danger">*</span></label>
+                                    {{ form.given_name }}
+                                    {% if form.given_name.errors %}
+                                        {% for error in form.given_name.errors %}
+                                            <div class="invalid-feedback d-block">{{ error }}</div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="id_surname">Last Name <span class="text-danger">*</span></label>
+                                    {{ form.surname }}
+                                    {% if form.surname.errors %}
+                                        {% for error in form.surname.errors %}
+                                            <div class="invalid-feedback d-block">{{ error }}</div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="id_email">Email</label>
+                                    {{ form.email }}
+                                    {% if form.email.errors %}
+                                        {% for error in form.email.errors %}
+                                            <div class="invalid-feedback d-block">{{ error }}</div>
+                                        {% endfor %}
+                                    {% endif %}
+                                    <small class="form-text text-muted">{{ form.email.help_text }}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="id_telephone">Phone Number</label>
+                                    {{ form.telephone }}
+                                    {% if form.telephone.errors %}
+                                        {% for error in form.telephone.errors %}
+                                            <div class="invalid-feedback d-block">{{ error }}</div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <h5 class="mt-4 mb-3 text-primary border-bottom pb-2">
+                            <i class="fas fa-sitemap mr-1"></i> Organization
+                        </h5>
+
+                        <div class="form-group">
+                            <label for="id_ou">Organizational Unit</label>
+                            {{ form.ou }}
+                            {% if form.ou.errors %}
+                                {% for error in form.ou.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.ou.help_text }}</small>
+                        </div>
+
+                        <div class="mt-4 d-flex align-items-center">
+                            <button type="submit" class="btn btn-success mr-2">
+                                <i class="fas fa-user-plus mr-1"></i> Create AD User
+                            </button>
+                            <a href="{% url 'admin:core_user_changelist' %}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
