@@ -1,141 +1,15 @@
 import logging
-
-from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.conf import settings
-from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.urls import path
-
-from employee import models as emp_models
+from .utils import _get_ad_creds, _connect_ad
+from .forms import ADUserCreationForm, ADPasswordChangeForm
 from .models import User
 
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Forms
-# ---------------------------------------------------------------------------
-
-class ADUserCreationForm(forms.Form):
-    """
-    Form to create a new user in Active Directory from the admin panel.
-    The password is sent to AD only — it is NOT stored locally.
-    """
-    username = forms.CharField(
-        max_length=100,
-        help_text='sAMAccountName (e.g. ahmed.atef). Do NOT include @domain.',
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'e.g. ahmed.atef',
-        }),
-    )
-    password = forms.CharField(
-        widget=forms.PasswordInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Min 7 chars, uppercase + number recommended',
-        }),
-        help_text='Password for the AD account. Must meet AD complexity requirements.',
-    )
-    given_name = forms.CharField(
-        max_length=100,
-        label='First Name',
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'e.g. Ahmed',
-        }),
-    )
-    surname = forms.CharField(
-        max_length=100,
-        label='Last Name',
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'e.g. Atef',
-        }),
-    )
-    email = forms.EmailField(
-        required=False,
-        help_text='Email address (optional). Auto-generated as username@domain if left blank.',
-        widget=forms.EmailInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'e.g. ahmed.atef@eissa.local',
-        }),
-    )
-    telephone = forms.CharField(
-        max_length=30,
-        required=False,
-        label='Phone Number',
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'e.g. 110067',
-        }),
-    )
-    ou = forms.ModelChoiceField(
-        queryset=emp_models.Department.objects.all().order_by('name'),
-        required=False,
-        label='Organizational Unit',
-        help_text='Select the department/OU to place the user in.',
-        empty_label='-- Select OU (optional) --',
-        widget=forms.Select(attrs={
-            'class': 'form-control form-select',
-        }),
-    )
-
-
-class ADPasswordChangeForm(forms.Form):
-    """
-    Form to change a user's password in Active Directory.
-    The password is sent to AD only — it is NOT stored locally.
-    """
-    new_password = forms.CharField(
-        label='New Password',
-        widget=forms.PasswordInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Enter new password',
-        }),
-        help_text='Must meet AD complexity requirements (min 7 chars, mix of uppercase, lowercase, numbers).',
-    )
-    confirm_password = forms.CharField(
-        label='Confirm Password',
-        widget=forms.PasswordInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Confirm new password',
-        }),
-    )
-
-    def clean(self):
-        cleaned = super().clean()
-        pwd = cleaned.get('new_password')
-        confirm = cleaned.get('confirm_password')
-        if pwd and confirm and pwd != confirm:
-            raise forms.ValidationError("Passwords do not match.")
-        return cleaned
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _get_ad_creds(request):
-    """Return cached AD creds or None."""
-    creds = cache.get(f'ad_creds_{request.user.id}')
-    if not creds or not creds.get('username') or not creds.get('password'):
-        return None
-    return creds
-
-
-def _connect_ad(creds):
-    """Return an authenticated AD connection, or None on failure."""
-    ad = settings.ACTIVE_DIR
-    if not ad.connect_ad(creds['username'], creds['password']):
-        return None
-    return ad
-
-
-# ---------------------------------------------------------------------------
-# User Admin
-# ---------------------------------------------------------------------------
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
@@ -161,10 +35,6 @@ class UserAdmin(BaseUserAdmin):
 
     def has_add_permission(self, request):
         return False
-
-    # ------------------------------------------------------------------
-    # Custom URLs
-    # ------------------------------------------------------------------
 
     def get_urls(self):
         custom_urls = [
