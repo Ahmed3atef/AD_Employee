@@ -48,6 +48,11 @@ class UserAdmin(BaseUserAdmin):
                 self.admin_site.admin_view(self.change_ad_password_view),
                 name='change_ad_password',
             ),
+            path(
+                '<path:object_id>/delete-ad-user/',
+                self.admin_site.admin_view(self.delete_ad_user),
+                name='delete_ad_user'
+            )
         ]
         return custom_urls + super().get_urls()
 
@@ -169,3 +174,65 @@ class UserAdmin(BaseUserAdmin):
         else:
             messages.error(request, f"Failed to change password: {msg}")
             return redirect('admin:change_ad_password', object_id=object_id)
+        
+    # ------------------------------------------------------------------
+    # Delete AD User View
+    # ------------------------------------------------------------------
+
+    def delete_ad_user(self, request, object_id):
+        """Delete a user from Active Directory and the local database."""
+        try:
+            user_obj = User.objects.get(pk=object_id)
+        except User.DoesNotExist:
+            messages.error(request, "User not found.")
+            return redirect('admin:core_user_changelist')
+
+        ad_username = user_obj.username.split('@')[0]
+
+        creds = _get_ad_creds(request)
+        if not creds:
+            messages.error(request, "AD credentials not found in cache. Please re-login.")
+            return redirect('admin:core_user_change', object_id)
+
+        if request.method == 'POST':
+            return self._process_ad_user_deletion(request, creds, user_obj, ad_username)
+
+        # GET — show confirmation page
+        context = {
+            **self.admin_site.each_context(request),
+            'title': f'Delete AD User — {ad_username}',
+            'ad_username': ad_username,
+            'user_obj': user_obj,
+            'opts': self.model._meta,
+        }
+        return render(request, 'admin/delete_ad_user.html', context)
+
+    def _process_ad_user_deletion(self, request, creds, user_obj, ad_username):
+        """Delete user from AD, then remove Employee + User from DB."""
+        ad = _connect_ad(creds)
+        if not ad:
+            messages.error(request, "Failed to connect to Active Directory.")
+            return redirect('admin:core_user_change', user_obj.pk)
+
+        # 1. Delete from Active Directory
+        success, msg = ad.delete_user(ad_username)
+        if not success:
+            messages.error(request, f"Failed to delete from AD: {msg}")
+            return redirect('admin:core_user_change', user_obj.pk)
+
+        # 2. Delete Employee profile from DB (if exists)
+        if hasattr(user_obj, 'employee_profile'):
+            user_obj.employee_profile.delete()
+
+        # 3. Delete the Django User from DB
+        username_display = user_obj.username
+        user_obj.delete()
+
+        messages.success(
+            request,
+            f"✓ User '{ad_username}' deleted from Active Directory and database.",
+        )
+        logger.info(
+            f"Admin {request.user.username} deleted AD user: {ad_username} ({username_display})"
+        )
+        return redirect('admin:core_user_changelist')

@@ -228,6 +228,34 @@ class ADConnection:
 
         logger.info(f"Password changed for AD user: {username}")
         return True, f"Password for '{username}' changed successfully."
+    
+    def delete_user(self, username):
+        """
+        Delete a user from Active Directory.
+
+        Args:
+            username:      sAMAccountName (e.g. 'ahmed.atef')
+
+        Returns:
+            (True, message) on success, (False, error_message) on failure.
+        """
+        self._ensure_bound()
+
+        dns = self.search_user_dn(username)
+        if not dns:
+            return False, f"User '{username}' not found in Active Directory."
+
+        user_dn = dns[0]
+
+        success = self.conn.delete(user_dn)
+        if not success:
+            error = self.conn.result.get('description', 'Unknown error')
+            message = self.conn.result.get('message', '')
+            logger.error(f"Failed to delete AD user {username}: {error} - {message}")
+            return False, f"{error}: {message}" if message else error
+
+        logger.info(f"Deleted AD user: {username}")
+        return True, f"User '{username}' deleted successfully from AD."
 
     def __del__(self):
         try:

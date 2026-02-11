@@ -1,10 +1,20 @@
 {% extends "admin/change_form.html" %}
 
 {% block submit_buttons_bottom %}
-<div class="card mt-3">
-    <a href="{% url 'admin:change_ad_password' object_id=original.pk %}" class="btn btn-warning">
-        Change Password
-    </a>
+<div class="submit-row">
+    <div class="card mt-3">
+        <a href="{% url 'admin:delete_ad_user' object_id=original.pk %}" class="btn btn-danger">
+            Delete From Active Directory
+        </a>
+    </div>
+    
+    <div class="card mt-3">
+        <a href="{% url 'admin:change_ad_password' object_id=original.pk %}" class="btn btn-warning">
+            Change Password
+        </a>
+    </div>
+    
+    {{ block.super }}
 </div>
-{{ block.super }}
 {% endblock %}
+
